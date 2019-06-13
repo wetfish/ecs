@@ -2,6 +2,7 @@
 import argparse
 import csv
 import Adafruit_DHT
+from w1thermsensor import W1ThermSensor
 from time import sleep, strftime 
 
 # Handle parsing command line arguments
@@ -51,7 +52,15 @@ def dht22(pin, outfile):
 
 # Start logging a ds18b20 sensor
 def ds18b20(pin, outfile):
-    print("ds18b20 sensor logging not operational yet")
+    with open("ds18b20.log" if outfile==None else outfile, "a") as log:
+        sensor = W1ThermSensor()
+        while True:
+            # When there is only 1 ds18b20 connected, w1thermsensor implicitly
+            # grabs the only sensor connected. With multiple sensors, some
+            # additional logic will need to be added
+            temp = sensor.get_temperature()
+            print('Temp: {0:0.1f}*C'.format(temp))
+            log.write("{0},{1:0.1f}\n".format(format_time(), temp))
 
 # Start logging a vm303 sensor
 def vm303(pin, outfile):
