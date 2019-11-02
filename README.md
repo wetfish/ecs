@@ -2,6 +2,14 @@
 Environmental control systems
 
 ## sensorlogger.py
+### Super basic instructions
+
+- Write raspberry pi OS to an SD card
+- Run `sudo apt update`
+- Then `sudo apt install python3-pip
+- Then `pip3 install -r requirements.txt`
+- Then `python3 simplelogger.py 26 dht11`
+
 #### Installation and usage
 Requires python 3
 
