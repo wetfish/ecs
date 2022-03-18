@@ -28,3 +28,12 @@ GPIO pin # and sensor type required. When -f is used, an output filename can be 
 GPIO pin # is the BCM pin #, not the board pin # https://raspberrypi.stackexchange.com/questions/12966/what-is-the-difference-between-board-and-bcm-for-gpio-pin-numbering
 
 Sensor type is all lower case. dht11, dht22, or ds18b20
+
+## quickcsvplotter.py
+Plots the data collected by sensorlogger.py
+
+Usage:
+
+`python3 quickcsvplotter.py [csv filename 1] [csv filename 2] ... [csv filename n]`
+
+Providing filenames in command line is optional. If no filenames are specified, all csvs in current directory will be plotted.
