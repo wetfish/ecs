@@ -32,7 +32,7 @@ def dht11(pin, outfile):
             # sleep for a second and poll again
             else:
                 print('Reading failed, polling again')
-                time.sleep(1)
+                sleep(1)
 
 # Start logging a dht22 sensor
 def dht22(pin, outfile):
@@ -47,7 +47,7 @@ def dht22(pin, outfile):
             # sleep for a second and poll again
             else:
                 print('Reading failed, polling again')
-                time.sleep(1)
+                sleep(1)
 
 if __name__ == "__main__":
     # Grab command line arguments

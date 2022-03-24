@@ -23,4 +23,4 @@ with open("dht11.log", "a") as log:
         # was busy, sleep for a second and try again
         else:
             print('Reading failed, polling again')
-            time.sleep(1)
+            sleep(1)
