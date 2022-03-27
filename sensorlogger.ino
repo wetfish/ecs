@@ -5,7 +5,7 @@
 
 ///////////////////////////////////////
 // Change filename and sensor type here 
-const String LOG_FILENAME = "dht11log.txt";
+const String LOG_FILENAME = "dhtlog.csv";
 #define DHT_TYPE DHT11
 
 ///////////////////////////////////////////
