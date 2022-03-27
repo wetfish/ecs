@@ -29,6 +29,20 @@ GPIO pin # is the BCM pin #, not the board pin # https://raspberrypi.stackexchan
 
 Sensor type is all lower case. dht11, dht22, or ds18b20
 
+## sensorlogger.ino
+#### Installation and usage
+- DHT sensor's data line is connected to pin 5.
+- SD card reader is connected as follows:
+	+ CS to pin 4
+	+ MOSI to pin 11
+	+ CLK to pin 13
+	+ MISO to pin 12
+- Optionally, an indicator LED is connected to pin 8
+
+Pin numbers, output filename, and DHT sensor type can be changed at the top of sensorlogger.ino. Filename must use short 8.3 format (8 character name and 3 character extension) Every time the arduino is booted it will create a csv file to record time, temperature, and relative humidity. Since it has no real time clock, the time is recorded in seconds since boot. 
+
+The indicator LED will light while readings are being taken. If there are any errors with the SD card reader, the device will flash the indicator LED, and will need to be reset.
+
 ## quickcsvplotter.py
 Plots the data collected by sensorlogger.py
 
