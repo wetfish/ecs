@@ -1,21 +1,19 @@
-/*
- Name:		sensorlogger.ino
- Created:	3/26/2022 12:57:34 AM
- Author:	Blood Bag
-*/
-
 #include <SPI.h>
 #include <SD.h>
 #include <DHT_U.h>
 #include <DHT.h>
 
-#define CS_PIN 4 // cs pin for sd card
+///////////////////////////////////////
+// Change filename and sensor type here 
 const String LOG_FILENAME = "dht11log.txt";
-
-#define DHT_PIN 5
 #define DHT_TYPE DHT11
 
-#define LED_PIN 8
+///////////////////////////////////////////
+// Pin selection
+// Pins 11, 12, and 13 (on arduino uno) are required for the SPI for the SD card reader, so don't use them.
+#define CS_PIN 4 // cs pin for sd card
+#define DHT_PIN 5 // data pin for dht sensor
+#define LED_PIN 8 // led pin for indicator. not required.
 
 
 class DHTLogger
