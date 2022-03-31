@@ -29,7 +29,7 @@ GPIO pin # is the BCM pin #, not the board pin # https://raspberrypi.stackexchan
 
 Sensor type is all lower case. dht11, dht22, or ds18b20
 
-## sensorlogger.ino
+## simplelogger.ino
 #### Installation and usage
 - DHT sensor's data line is connected to pin 5.
 - SD card reader is connected as follows:
