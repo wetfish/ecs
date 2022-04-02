@@ -1,8 +1,8 @@
 #include <SPI.h>
-#include <SD.h>
-#include <DHT_U.h>
-#include <DHT.h>
-#include <DallasTemperature.h>
+#include <SD.h> // http://www.arduino.cc/en/Reference/SD
+#include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
+#include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
+#include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library
 enum SensorModels
 {dht11, dht22, ds18b20};
 struct SensorInfo
@@ -14,7 +14,7 @@ struct SensorInfo
 ///////////////////////////////////////////
 // Change filename, polling interval, and sensor types here  
 // Sensor types so far: dht11, dht22, or ds18b20
-const String LOG_FILENAME = "dht11log.txt";
+const String LOG_FILENAME = "log.txt";
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
 const SensorInfo SENSORS[] = 
 {// {sensor type, pin #}
@@ -27,16 +27,18 @@ uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 const uint8_t CS_PIN = 4;// cs pin for sd card
 const uint8_t LED_PIN = 8; // led pin for indicator. not required.
 
+////////////////////////////////////////////
+// When adding new sensors, just make a wrapper that has the following variables and methods:
 class Sensor_Wrap
 {
 	public:
 	uint8_t num_readings; // how many readings to take from this sensor (a DHT22 has 2: temperature and humidity)
-	String labels;
-	virtual void init(){} // whatever needs to go in setup()
-	virtual float getReading(uint8_t reading_num){return NAN;} // return invalid value
+	String labels; // label(s) for the data gathered from sensor
+	virtual void init(){} // whatever needs to go into setup()
+	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
 };
 
-// DHT 
+// DHT sensors
 class DHT_Wrap : public Sensor_Wrap
 {
 	private:
@@ -69,7 +71,7 @@ class DHT_Wrap : public Sensor_Wrap
 	}
 };
 
-// DS18B20
+// DS18B20 sensor
 class DS18B20_Wrap : public Sensor_Wrap
 {
 	private:
