@@ -4,7 +4,7 @@
 #include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library
 enum SensorModels
-{dht11, dht22, ds18b20};
+{dht11, dht22, ds18b20, voltmeter};
 struct SensorInfo
 {
 	SensorModels model; // dht11, dht22, or ds18b20
@@ -95,6 +95,27 @@ class DS18B20_Wrap : public Sensor_Wrap
 	{
 		ds18b20.requestTemperatures();
 		return ds18b20.getTempFByIndex(0);
+	}
+};
+
+// Voltmeter - scale of 1 maps analog reading to 0 - 5V. if using a voltage divider, apply approriate scale.
+class Volt_Wrap : public Sensor_Wrap
+{	
+	float scale;
+	uint8_t analog_pin;
+
+	public:
+	Volt_Wrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
+
+	void init()
+	{
+		pinMode(analog_pin, INPUT);
+	}
+	float getReading(uint8_t reading_num)
+	{
+		int reading = analogRead(analog_pin); // returns value from 0-1024
+		float V = scale * (reading * 5.0f) / 1024.0f; 
+		return V;
 	}
 };
 
@@ -260,6 +281,9 @@ class Data_Logger
 			case ds18b20:
 				sensor_list->push_back(new DS18B20_Wrap(sensors[i].pin));
 				break;
+			case voltmeter:
+				sensor_list->push_back(new Volt_Wrap(sensors[i].pin));
+				break;
 			default:
 				break;
 			}
@@ -372,6 +396,3 @@ void loop()
 {
 	data_logger.write_to_log();
 }
-
-
-
