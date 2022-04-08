@@ -2,12 +2,14 @@
 #include <SD.h> // http://www.arduino.cc/en/Reference/SD
 #include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
 #include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
-#include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library
+#include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
+#include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
+
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter};
+{dht11, dht22, ds18b20, voltmeter, bme280};
 struct SensorInfo
 {
-	SensorModels model; // dht11, dht22, or ds18b20
+	SensorModels model;
 	uint8_t pin; // data pin of that sensor
 };
 
@@ -24,12 +26,13 @@ uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 ///////////////////////////////////////////
 // Other Pin selection
 // Pins 11, 12, and 13 (on arduino uno) are required for the SPI for the SD card reader, so don't use them.
+// Pins 18 and 19 (or is it A4 & A5?) are used for I2C communication, so don't use them either.
 const uint8_t CS_PIN = 4;// cs pin for sd card
 const uint8_t LED_PIN = 8; // led pin for indicator. not required.
 
 ////////////////////////////////////////////
 // When adding new sensors, just make a wrapper that has the following variables and methods:
-class Sensor_Wrap
+class SensorWrap
 {
 	public:
 	uint8_t num_readings; // how many readings to take from this sensor (a DHT22 has 2: temperature and humidity)
@@ -39,13 +42,13 @@ class Sensor_Wrap
 };
 
 // DHT sensors
-class DHT_Wrap : public Sensor_Wrap
+class DhtWrap : public SensorWrap
 {
 	private:
 	DHT dht;
 
 	public:
-	DHT_Wrap(uint8_t pin_num, uint8_t dht_type): dht(pin_num, dht_type)
+	DhtWrap(uint8_t pin_num, uint8_t dht_type): dht(pin_num, dht_type)
 	{
 		num_readings = 2; // 1 temp and 1 humidity
 		labels = "DHT-Temp(F), DHT-RH(%)";
@@ -72,14 +75,14 @@ class DHT_Wrap : public Sensor_Wrap
 };
 
 // DS18B20 sensor
-class DS18B20_Wrap : public Sensor_Wrap
+class DS18B20Wrap : public SensorWrap
 {
 	private:
 	OneWire onewire;
 	DallasTemperature ds18b20;
 
 	public:
-	DS18B20_Wrap(uint8_t pin_num): onewire(pin_num) 
+	DS18B20Wrap(uint8_t pin_num): onewire(pin_num) 
 	{
 		num_readings = 1;
 		labels = "DS18-Temp(F)";
@@ -99,23 +102,81 @@ class DS18B20_Wrap : public Sensor_Wrap
 };
 
 // Voltmeter - scale of 1 maps analog reading to 0 - 5V. if using a voltage divider, apply approriate scale.
-class Volt_Wrap : public Sensor_Wrap
+class VoltWrap : public SensorWrap
 {	
 	float scale;
 	uint8_t analog_pin;
 
 	public:
-	Volt_Wrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
+	VoltWrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
 
 	void init()
 	{
 		pinMode(analog_pin, INPUT);
+		num_readings = 1;
+		labels = "Voltage";
 	}
 	float getReading(uint8_t reading_num)
 	{
 		int reading = analogRead(analog_pin); // returns value from 0-1024
 		float V = scale * (reading * 5.0f) / 1024.0f; 
 		return V;
+	}
+};
+
+// BME280 sensor using I2C : pins 18 & 19 (or A4 & A5? - TODO test this) on arduino uno
+class BME280Wrap : public SensorWrap
+{
+	private:
+	// set which values to measure - reorder the switch statement if there are any true after a false
+	const bool IS_TAKING_P = true;
+	const bool IS_TAKING_RH = true;
+	const bool IS_TAKING_TEMP = false;
+	Adafruit_BME280 bme; // this is I2C mode, constructor takes CS pin as argument for SPI mode
+
+	public:
+	BME280Wrap()
+	{
+		num_readings = IS_TAKING_P + IS_TAKING_RH + IS_TAKING_TEMP;
+		labels = "";
+		if (IS_TAKING_P)
+		{
+			labels += "BME280 P(hPa), ";
+		}
+		if (IS_TAKING_RH)
+		{
+			labels += "BME280 RH(%), ";
+		}
+		if (IS_TAKING_TEMP)
+		{
+			labels += "BME280 Temp(F), ";
+		}
+		if (num_readings && labels.endsWith(", "))
+		{
+			labels.remove(labels.length() - 2, 2);
+		}
+
+	}
+
+	void init()
+	{
+		Serial.println("BME280 sensor online");
+		bme.begin();
+	}
+
+	float getReading(uint8_t reading_num)
+	{
+		switch (reading_num)
+		{
+		case 0:
+			return bme.readPressure() / 100.0f; // taken in Pa, converted to hPa (millibars)
+		case 1:
+			return bme.readHumidity();
+		case 2:
+			return bme.readTemperature() * 9.0f / 5.0f + 32; // taken in C, converted to F
+		default:
+			return NAN;
+		}
 	}
 };
 
@@ -190,7 +251,7 @@ class Data_Logger
 	uint8_t led_pin;
 	unsigned long poll_interval;
 	unsigned long last_poll;
-	LinkedList<Sensor_Wrap*>* sensor_list = new LinkedList<Sensor_Wrap*>();
+	LinkedList<SensorWrap*>* sensor_list = new LinkedList<SensorWrap*>();
 	
 	public:
 	Data_Logger(String logFn, uint8_t CSpinNo, uint8_t LEDpinNo, unsigned long pollInt) : 
@@ -227,7 +288,7 @@ class Data_Logger
 	void init_sensors(const SensorInfo sensors[], uint8_t& num_sensors)
 	{
 		list_sensors(sensors, num_sensors);
-		LinkedList<Sensor_Wrap*>::Node* current_sensor = sensor_list->head;
+		LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
 		while(current_sensor)
 		{
 			current_sensor->sensor->init();
@@ -273,16 +334,16 @@ class Data_Logger
 			switch (sensors[i].model)
 			{
 			case dht11:
-				sensor_list->push_back(new DHT_Wrap(sensors[i].pin, DHT11));
+				sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT11));
 				break;
 			case dht22:
-				sensor_list->push_back(new DHT_Wrap(sensors[i].pin, DHT22));
+				sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT22));
 				break;
 			case ds18b20:
-				sensor_list->push_back(new DS18B20_Wrap(sensors[i].pin));
+				sensor_list->push_back(new DS18B20Wrap(sensors[i].pin));
 				break;
 			case voltmeter:
-				sensor_list->push_back(new Volt_Wrap(sensors[i].pin));
+				sensor_list->push_back(new VoltWrap(sensors[i].pin));
 				break;
 			default:
 				break;
@@ -339,7 +400,7 @@ class Data_Logger
 		// record time
 		String datum = String(last_poll/1000);
 		// get data from sensors
-		LinkedList<Sensor_Wrap*>::Node* current_sensor = sensor_list->head;
+		LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
 		while(current_sensor)
 		{
 			// record reading into string
