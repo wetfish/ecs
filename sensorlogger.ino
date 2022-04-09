@@ -7,7 +7,7 @@
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
 
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter, bme280, ads1015};
+{dht11, dht22, ds18b20, voltmeter, bme280, ads1015, ads1015anemometer};
 struct SensorInfo
 {
 	SensorModels model;
@@ -36,7 +36,7 @@ const uint8_t LED_PIN = 8; // led pin for indicator. not required.
 class SensorWrap
 {
 	public:
-	uint8_t num_readings; // how many readings to take from this sensor (a DHT22 has 2: temperature and humidity)
+	uint8_t num_readings = 1; // how many readings to take from this sensor (a DHT22 has 2: temperature and humidity)
 	String labels; // label(s) for the data gathered from sensor
 	virtual void init(){} // whatever needs to go into setup()
 	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
@@ -191,6 +191,7 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	// GAIN_ONE:       +-4.096V  |  GAIN_EIGHT:   +-0.512V
 	// GAIN_TWO:       +-2.048V  |  GAIN_SIXTEEN: +-0.256V
 	const adsGain_t GAIN = GAIN_TWOTHIRDS;
+	protected:
 	// Set voltage divider resistors here.
 	// If not using voltage divider, set R1 to 0 and R2 to any positive value
 	const float R1 = 0;
@@ -202,6 +203,7 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	ADS1015VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
 	{
 		ads.setGain(GAIN);
+		num_readings = 1;
 	}
 	virtual void init()
 	{
@@ -223,6 +225,30 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	virtual float getReading([[maybe_unused]] uint8_t reading_num)
 	{
 		return getReadingVinVolts();
+	}
+};
+
+class ADS1015AnemometerWrap : public ADS1015VoltmeterWrap
+{
+	public:
+	using ADS1015VoltmeterWrap::ADS1015VoltmeterWrap;
+	void init()
+	{
+		Serial.println("ADS Anemometer online");
+		labels = "Wind Speed";
+		ads.begin();
+	}
+	// Might need some testing to confirm the ranges.
+	float getReading([[maybe_unused]] uint8_t reading_num)
+	{
+		// according to product page : https://www.adafruit.com/product/1733
+		// voltage varies .4 - 2V and corresponds to wind speed of 0 - 32.4 m/s, with 9V supply to anemometer
+		// assume linear interpolation until testing proves otherwise
+		float Vmin = .4; // V for Volts
+		float Vmax = 2.0;
+		float vMin = 0; // v for velocity
+		float vMax = 32.4;
+		return (vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin;
 	}
 };
 
@@ -396,6 +422,9 @@ class Data_Logger
 				break;
 			case ads1015:
 				sensor_list->push_back(new ADS1015VoltmeterWrap(sensors[i].pin));
+				break;
+			case ads1015anemometer:
+				sensor_list->push_back(new ADS1015AnemometerWrap(sensors[i].pin));
 				break;
 			default:
 				break;
