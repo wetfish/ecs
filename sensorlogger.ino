@@ -4,9 +4,10 @@
 #include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
 #include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
+#include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
 
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter, bme280};
+{dht11, dht22, ds18b20, voltmeter, bme280, ads1015};
 struct SensorInfo
 {
 	SensorModels model;
@@ -102,13 +103,13 @@ class DS18B20Wrap : public SensorWrap
 };
 
 // Voltmeter - scale of 1 maps analog reading to 0 - 5V. if using a voltage divider, apply approriate scale.
-class VoltWrap : public SensorWrap
+class VoltmeterWrap : public SensorWrap
 {	
 	float scale;
 	uint8_t analog_pin;
 
 	public:
-	VoltWrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
+	VoltmeterWrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
 
 	void init()
 	{
@@ -116,7 +117,7 @@ class VoltWrap : public SensorWrap
 		num_readings = 1;
 		labels = "Voltage";
 	}
-	float getReading(uint8_t reading_num)
+	float getReading([[maybe_unused]] uint8_t reading_num)
 	{
 		int reading = analogRead(analog_pin); // returns value from 0-1024
 		float V = scale * (reading * 5.0f) / 1024.0f; 
@@ -177,6 +178,51 @@ class BME280Wrap : public SensorWrap
 		default:
 			return NAN;
 		}
+	}
+};
+
+// ADS1015 Analog to Digital Converter - using I2C
+// Gets one reading at a time. Process that reading based on what you're measuring.
+class ADS1015VoltmeterWrap : public SensorWrap
+{
+	// Set Gain here. It determines voltage input range.
+	//    GAIN           Range   |     GAIN         Range
+	// GAIN_TWOTHIRDS: +-6.144V  |  GAIN_FOUR:    +-1.024V
+	// GAIN_ONE:       +-4.096V  |  GAIN_EIGHT:   +-0.512V
+	// GAIN_TWO:       +-2.048V  |  GAIN_SIXTEEN: +-0.256V
+	const adsGain_t GAIN = GAIN_TWOTHIRDS;
+	// Set voltage divider resistors here.
+	// If not using voltage divider, set R1 to 0 and R2 to any positive value
+	const float R1 = 0;
+	const float R2 = 1;
+
+	Adafruit_ADS1015 ads;
+	uint8_t pin;
+	public:
+	ADS1015VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
+	{
+		ads.setGain(GAIN);
+	}
+	virtual void init()
+	{
+		Serial.println("ADS1015 ADC online");
+		labels = "Voltage";
+		ads.begin();
+	}
+	// Just return voltage reading from analog in.
+	float getReadingVoutVolts()
+	{
+		return ads.computeVolts(ads.readADC_SingleEnded(pin));
+	}
+	// Return Vin voltage of voltage divider circuit
+	float getReadingVinVolts()
+	{
+		return getReadingVoutVolts() * (R1 + R2) / R2;
+	}
+	// Override this with any sensor-specific calculations
+	virtual float getReading([[maybe_unused]] uint8_t reading_num)
+	{
+		return getReadingVinVolts();
 	}
 };
 
@@ -343,7 +389,13 @@ class Data_Logger
 				sensor_list->push_back(new DS18B20Wrap(sensors[i].pin));
 				break;
 			case voltmeter:
-				sensor_list->push_back(new VoltWrap(sensors[i].pin));
+				sensor_list->push_back(new VoltmeterWrap(sensors[i].pin));
+				break;
+			case bme280:
+				sensor_list->push_back(new BME280Wrap());
+				break;
+			case ads1015:
+				sensor_list->push_back(new ADS1015VoltmeterWrap(sensors[i].pin));
 				break;
 			default:
 				break;
