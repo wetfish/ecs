@@ -5,9 +5,10 @@
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
 #include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
+//#include <Adafruit_INA219.h> https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
 
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter, bme280, ads1015, ads1015anemometer};
+{dht11, dht22, ds18b20, voltmeter, bme280, ads1015, ads1015anemometer, ina219};
 struct SensorInfo
 {
 	SensorModels model;
@@ -42,6 +43,7 @@ class SensorWrap
 	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
 };
 
+
 // DHT sensors
 class DhtWrap : public SensorWrap
 {
@@ -57,7 +59,7 @@ class DhtWrap : public SensorWrap
 
 	void init()
 	{
-		Serial.println("DHT sensor online");
+		Serial.println("DHT init");
 		dht.begin();
 	}
 
@@ -74,6 +76,7 @@ class DhtWrap : public SensorWrap
 		}
 	}
 };
+
 
 // DS18B20 sensor
 class DS18B20Wrap : public SensorWrap
@@ -102,11 +105,12 @@ class DS18B20Wrap : public SensorWrap
 	}
 };
 
+
 // Voltmeter - scale of 1 maps analog reading to 0 - 5V. if using a voltage divider, apply approriate scale.
 class VoltmeterWrap : public SensorWrap
 {	
-	float scale;
 	uint8_t analog_pin;
+	float scale;
 
 	public:
 	VoltmeterWrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
@@ -125,7 +129,8 @@ class VoltmeterWrap : public SensorWrap
 	}
 };
 
-// BME280 sensor using I2C : pins 18 & 19 (or A4 & A5? - TODO test this) on arduino uno
+
+// BME280 sensor using I2C : A4 & A5 on arduino uno and arduino pro mini
 class BME280Wrap : public SensorWrap
 {
 	private:
@@ -161,7 +166,7 @@ class BME280Wrap : public SensorWrap
 
 	void init()
 	{
-		Serial.println("BME280 sensor online");
+		Serial.println("BME280 init");
 		bme.begin();
 	}
 
@@ -185,6 +190,7 @@ class BME280Wrap : public SensorWrap
 // Gets one reading at a time. Process that reading based on what you're measuring.
 class ADS1015VoltmeterWrap : public SensorWrap
 {
+	
 	// Set Gain here. It determines voltage input range.
 	//    GAIN           Range   |     GAIN         Range
 	// GAIN_TWOTHIRDS: +-6.144V  |  GAIN_FOUR:    +-1.024V
@@ -207,7 +213,7 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	}
 	virtual void init()
 	{
-		Serial.println("ADS1015 ADC online");
+		Serial.println("ADC init");
 		labels = "Voltage";
 		ads.begin();
 	}
@@ -234,7 +240,7 @@ class ADS1015AnemometerWrap : public ADS1015VoltmeterWrap
 	using ADS1015VoltmeterWrap::ADS1015VoltmeterWrap;
 	void init()
 	{
-		Serial.println("ADS Anemometer online");
+		Serial.println("Windspd init");
 		labels = "Wind Speed";
 		ads.begin();
 	}
@@ -251,6 +257,42 @@ class ADS1015AnemometerWrap : public ADS1015VoltmeterWrap
 		return (vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin;
 	}
 };
+
+/*
+// INA219 sensor using I2C : A4 & A5 on arduino uno and arduino pro mini
+class INA219Wrap : public SensorWrap
+{
+	private:
+	Adafruit_INA219 ina;
+
+	public:
+	INA219Wrap()
+	{
+		num_readings = 2; // Amps and Volts
+		labels = "Current(mA), Voltage(V)";
+	}
+
+	void init()
+	{
+		Serial.println("INA init");
+		ina.begin();
+	}
+
+	float getReading(uint8_t reading_num)
+	{
+		switch (reading_num)
+		{
+			case 0:
+				return ina.getCurrent_mA();
+			case 1:
+				return ina.getBusVoltage_V() + (ina.getShuntVoltage_mV() / 1000);
+			default:
+				return NAN;
+		}
+	}
+
+};
+*/
 
 // List for different sensors
 template <typename T>
@@ -341,7 +383,7 @@ class Data_Logger
 	{
 		Serial.println("CS_pin: " + String(cs_pin));
 		Serial.println("led_pin: " + String(led_pin));
-		Serial.println("Poll Interval: " + String(poll_interval));
+		Serial.println("Poll Intvl: " + String(poll_interval));
 
 		// set up led
 		pinMode(led_pin, OUTPUT);
@@ -350,7 +392,7 @@ class Data_Logger
 		if (!SD.begin(cs_pin))
 		{
 			// error
-			Serial.println("Error, cannot find SD card on pin " + String(cs_pin));
+			Serial.println("SD err" + String(cs_pin));
 			error_blink();
 		}
 		// get the right filename
@@ -369,7 +411,7 @@ class Data_Logger
 		}
 		// show what each column means
 		Serial.println("\n" + column_labels);
-		Serial.println("-------------------------------");
+		//Serial.println("-------------------------------");
 	}
 
 	// keeps track of poll interval, takes readings, and writes to file
@@ -381,8 +423,8 @@ class Data_Logger
 			File log_file = SD.open(log_fn, FILE_WRITE);
 			if(!log_file) // if file can't be opened, show error
 			{
-				Serial.println("Error opening from file \"" + log_fn + "\"");
-				Serial.println("Filename must be in short 8.3 format."); // 8 characters + . + 3 characters
+				Serial.println("Error opening file \"" + log_fn + "\"");
+				Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
 				//error_blink();
 			}
 			//else// otherwise, everything is fine
@@ -425,6 +467,9 @@ class Data_Logger
 				break;
 			case ads1015anemometer:
 				sensor_list->push_back(new ADS1015AnemometerWrap(sensors[i].pin));
+				break;
+			case ina219:
+			//	sensor_list->push_back(new INA219Wrap());
 				break;
 			default:
 				break;
