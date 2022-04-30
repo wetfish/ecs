@@ -14,7 +14,23 @@ struct SensorInfo
 	SensorModels model;
 	uint8_t pin; // data pin of that sensor
 };
-
+// Pins printed on the NodeMCU board are not the same as the esp8266 GPIO pin number
+namespace NodeMcuPins
+{
+	enum : uint8_t
+	{
+		D0 = 16, D1 = 5, D2 = 4, D4 = 2,
+		D5 = 14, D6 = 12, D7 = 13, D8 = 15,
+		RX = 3, TX = 1, SD2 = 9, SD3 = 10
+	};
+}
+namespace Ads1115Pins
+{
+	enum : uint8_t
+	{
+		A0 = 0, A1 = 1, A2 = 2, A3 = 3
+	};
+}
 ///////////////////////////////////////////
 // Change filename, polling interval, and sensor types here  
 // Sensor types so far: dht11, dht22, or ds18b20
@@ -23,7 +39,7 @@ const unsigned long POLL_INTERVAL = 3000; // in milliseconds
 const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor type, pin #}
-	{bme280, 0}
+	{bme280, Ads1115Pins::A0}, {ds18b20, NodeMcuPins::SD3}
 };
 uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 ///////////////////////////////////////////
@@ -98,12 +114,16 @@ class DS18B20Wrap : public SensorWrap
 	{
 		ds18b20.setOneWire(&onewire);
 		ds18b20.begin();
+		num_readings = ds18b20.getDeviceCount();
 	}
 
-	float getReading([[maybe_unused]] uint8_t reading_num)
+	float getReading(uint8_t reading_num)
 	{
-		ds18b20.requestTemperatures();
-		return ds18b20.getTempFByIndex(0);
+		if(reading_num == 0)
+		{  // only request temps once for all readings
+			ds18b20.requestTemperatures();
+		}
+		return ds18b20.getTempFByIndex(reading_num); // more sensors can be on the same onewire
 	}
 };
 
