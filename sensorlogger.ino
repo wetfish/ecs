@@ -1,14 +1,14 @@
 #include <SPI.h>
 #include <SD.h> // http://www.arduino.cc/en/Reference/SD
-#include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
-#include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
+//#include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
+//#include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
 #include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
-//#include <Adafruit_INA219.h> https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
+#include <Adafruit_INA219.h> // https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
 
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter, bme280, ads1015, ads1015anemometer, ina219};
+{dht11, dht22, ds18b20, voltmeter, bme280, ads1x15, ads1x15anemometer, ina219};
 struct SensorInfo
 {
 	SensorModels model;
@@ -20,17 +20,18 @@ struct SensorInfo
 // Sensor types so far: dht11, dht22, or ds18b20
 const String LOG_FILENAME = "log.txt";
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
+const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor type, pin #}
-	{dht11, 5}
+	{bme280, 0}
 };
 uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 ///////////////////////////////////////////
 // Other Pin selection
 // Pins 11, 12, and 13 (on arduino uno) are required for the SPI for the SD card reader, so don't use them.
 // Pins 18 and 19 (or is it A4 & A5?) are used for I2C communication, so don't use them either.
-const uint8_t CS_PIN = 4;// cs pin for sd card
-const uint8_t LED_PIN = 8; // led pin for indicator. not required.
+const uint8_t CS_PIN = 12;// cs pin for sd card
+const uint8_t LED_PIN = LED_BUILTIN_AUX; // led pin for indicator. not required.
 
 ////////////////////////////////////////////
 // When adding new sensors, just make a wrapper that has the following variables and methods:
@@ -43,7 +44,7 @@ class SensorWrap
 	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
 };
 
-
+/*
 // DHT sensors
 class DhtWrap : public SensorWrap
 {
@@ -76,6 +77,7 @@ class DhtWrap : public SensorWrap
 		}
 	}
 };
+*/
 
 
 // DS18B20 sensor
@@ -134,12 +136,13 @@ class VoltmeterWrap : public SensorWrap
 class BME280Wrap : public SensorWrap
 {
 	private:
+	// might need an i2c scanner if this address is incorrect
+	const uint8_t I2C_ADDR = 0x76;
 	// set which values to measure - reorder the switch statement if there are any true after a false
 	const bool IS_TAKING_P = true;
 	const bool IS_TAKING_RH = true;
-	const bool IS_TAKING_TEMP = false;
+	const bool IS_TAKING_TEMP = true;
 	Adafruit_BME280 bme; // this is I2C mode, constructor takes CS pin as argument for SPI mode
-
 	public:
 	BME280Wrap()
 	{
@@ -167,11 +170,25 @@ class BME280Wrap : public SensorWrap
 	void init()
 	{
 		Serial.println("BME280 init");
-		bme.begin();
+		if(!bme.begin(I2C_ADDR))
+		{
+			Serial.println("Error: bme280 failed");
+			while(1){}
+		}
+		// sampling settings:
+		// forced mode only takes readings as needed, no oversampling, and we don't need filter
+		// for any measurements not being taken, set to SAMPLING_X0
+		bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1, // temperature
+                    Adafruit_BME280::SAMPLING_X1, // pressure
+                    Adafruit_BME280::SAMPLING_X1, // humidity
+                    Adafruit_BME280::FILTER_OFF   );
+		
 	}
 
 	float getReading(uint8_t reading_num)
 	{
+		bme.takeForcedMeasurement();
 		switch (reading_num)
 		{
 		case 0:
@@ -188,7 +205,7 @@ class BME280Wrap : public SensorWrap
 
 // ADS1015 Analog to Digital Converter - using I2C
 // Gets one reading at a time. Process that reading based on what you're measuring.
-class ADS1015VoltmeterWrap : public SensorWrap
+class ADS1x15VoltmeterWrap : public SensorWrap
 {
 	
 	// Set Gain here. It determines voltage input range.
@@ -203,17 +220,20 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	const float R1 = 0;
 	const float R2 = 1;
 
-	Adafruit_ADS1015 ads;
+	// Addresses depend on what ADDR pin in shorted to (default GND)
+	// GND: 0x48   |  SDA: 0x4A
+	// VDD: 0x49   |  SCL: 0x4B
+	Adafruit_ADS1115 ads;
 	uint8_t pin;
 	public:
-	ADS1015VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
+	ADS1x15VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
 	{
 		ads.setGain(GAIN);
 		num_readings = 1;
 	}
 	virtual void init()
 	{
-		Serial.println("ADC init");
+		Serial.println("ADC init on pin " + String(pin));
 		labels = "Voltage";
 		ads.begin();
 	}
@@ -234,10 +254,10 @@ class ADS1015VoltmeterWrap : public SensorWrap
 	}
 };
 
-class ADS1015AnemometerWrap : public ADS1015VoltmeterWrap
+class ADS1x15AnemometerWrap : public ADS1x15VoltmeterWrap
 {
 	public:
-	using ADS1015VoltmeterWrap::ADS1015VoltmeterWrap;
+	using ADS1x15VoltmeterWrap::ADS1x15VoltmeterWrap;
 	void init()
 	{
 		Serial.println("Windspd init");
@@ -258,7 +278,6 @@ class ADS1015AnemometerWrap : public ADS1015VoltmeterWrap
 	}
 };
 
-/*
 // INA219 sensor using I2C : A4 & A5 on arduino uno and arduino pro mini
 class INA219Wrap : public SensorWrap
 {
@@ -292,7 +311,6 @@ class INA219Wrap : public SensorWrap
 	}
 
 };
-*/
 
 // List for different sensors
 template <typename T>
@@ -366,6 +384,7 @@ class Data_Logger
 	unsigned long poll_interval;
 	unsigned long last_poll;
 	LinkedList<SensorWrap*>* sensor_list = new LinkedList<SensorWrap*>();
+	bool did_err_msg = false;
 	
 	public:
 	Data_Logger(String logFn, uint8_t CSpinNo, uint8_t LEDpinNo, unsigned long pollInt) : 
@@ -381,13 +400,18 @@ class Data_Logger
 	// initializers. these go in setup()
 	void init_sd()
 	{
+		if(NO_SD)
+		{
+			return;
+		}
 		Serial.println("CS_pin: " + String(cs_pin));
 		Serial.println("led_pin: " + String(led_pin));
 		Serial.println("Poll Intvl: " + String(poll_interval));
 
 		// set up led
 		pinMode(led_pin, OUTPUT);
-		
+		Led(false);
+
 		// check if sd card is not set up
 		if (!SD.begin(cs_pin))
 		{
@@ -419,19 +443,25 @@ class Data_Logger
 	{
 		if(timekeeper())
 		{
+			// read from sensors
+			String temp_s = read_from_sensors();
+			Serial.println(temp_s);
+			// if not using sd stop here
+			if(NO_SD)
+			{
+				return;
+			}
 			// open file
 			File log_file = SD.open(log_fn, FILE_WRITE);
 			if(!log_file) // if file can't be opened, show error
 			{
 				Serial.println("Error opening file \"" + log_fn + "\"");
 				Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
-				//error_blink();
+				error_blink();
 			}
-			//else// otherwise, everything is fine
+			else// otherwise, everything is fine
 			{
-				String temp_s = read_from_sensors();
 				log_file.println(temp_s);
-				Serial.println(temp_s);
 				log_file.close();
 			}
 		}
@@ -447,12 +477,12 @@ class Data_Logger
 		{
 			switch (sensors[i].model)
 			{
-			case dht11:
-				sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT11));
-				break;
-			case dht22:
-				sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT22));
-				break;
+			//case dht11:
+			//	sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT11));
+			//	break;
+			//case dht22:
+			//	sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT22));
+			//	break;
 			case ds18b20:
 				sensor_list->push_back(new DS18B20Wrap(sensors[i].pin));
 				break;
@@ -462,14 +492,14 @@ class Data_Logger
 			case bme280:
 				sensor_list->push_back(new BME280Wrap());
 				break;
-			case ads1015:
-				sensor_list->push_back(new ADS1015VoltmeterWrap(sensors[i].pin));
+			case ads1x15:
+				sensor_list->push_back(new ADS1x15VoltmeterWrap(sensors[i].pin));
 				break;
-			case ads1015anemometer:
-				sensor_list->push_back(new ADS1015AnemometerWrap(sensors[i].pin));
+			case ads1x15anemometer:
+				sensor_list->push_back(new ADS1x15AnemometerWrap(sensors[i].pin));
 				break;
 			case ina219:
-			//	sensor_list->push_back(new INA219Wrap());
+				sensor_list->push_back(new INA219Wrap());
 				break;
 			default:
 				break;
@@ -507,6 +537,7 @@ class Data_Logger
 	// returns true when it's time for another reading
 	bool timekeeper()
 	{
+		yield();
 		unsigned long now_ms = millis();
 		if (now_ms - last_poll > poll_interval)
 		{
@@ -533,7 +564,7 @@ class Data_Logger
 			for (int i = 0; i < current_sensor->sensor->num_readings; i++)
 			{
 				// make sure a valid reading is taken
-				float temp_f = current_sensor->sensor->getReading(i);
+				float temp_f; // = current_sensor->sensor->getReading(i);
 				do
 				{
 					temp_f = current_sensor->sensor->getReading(i);
@@ -571,12 +602,13 @@ Data_Logger data_logger(LOG_FILENAME, CS_PIN, LED_PIN, POLL_INTERVAL);
 
 void setup()
 {
-	Serial.begin(9600);
+	Serial.begin(115200);
 
 	// initilize sd and sensors
 	data_logger.init_sd();
 	data_logger.init_sensors(SENSORS, num_sensors);
 
+	yield();
 }
 
 void loop()
