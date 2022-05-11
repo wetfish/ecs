@@ -7,14 +7,15 @@
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
 #include <Adafruit_INA219.h> // https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
 
+// These are the valid sensor models than can be used.
 enum SensorModels
-{dht11, dht22, ds18b20, voltmeter, bme280, ads1x15, ads1x15anemometer, ina219};
+{/*dht11, dht22,*/ ds18b20, voltmeter, bme280, ads1115, ads1115anemometer, ina219};
 struct SensorInfo
 {
 	SensorModels model;
-	uint8_t pin; // data pin of that sensor
+	uint8_t pin; // data pin of that sensor - for I2C devices, this usually is arbitrary
 };
-// Pins printed on the NodeMCU board are not the same as the esp8266 GPIO pin number
+// Pins printed on the NodeMCU board are not the same as the esp8266 GPIO pin number, which is what we actually need to use here
 namespace NodeMcuPins
 {
 	enum : uint8_t
@@ -31,25 +32,25 @@ namespace Ads1115Pins
 		A0 = 0, A1 = 1, A2 = 2, A3 = 3
 	};
 }
-///////////////////////////////////////////
-// Change filename, polling interval, and sensor types here  
-// Sensor types so far: dht11, dht22, or ds18b20
+//----------------------------------------------------------
+// Change filename, polling interval, SD logging, and sensor types here
 const String LOG_FILENAME = "log.txt";
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = true; // disables sd card logging
+const bool NO_SD = false; // disables sd card logging
 const SensorInfo SENSORS[] = 
-{// {sensor type, pin #}
-	{bme280, Ads1115Pins::A0}, {ds18b20, NodeMcuPins::SD3}
+{// {sensor model, pin #}
+	{ina219, 0}//{ads1115, Ads1115Pins::A0}//, {ds18b20, NodeMcuPins::SD3}
 };
 uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
-///////////////////////////////////////////
+
+//----------------------------------------------------------
 // Other Pin selection
-// Pins 11, 12, and 13 (on arduino uno) are required for the SPI for the SD card reader, so don't use them.
-// Pins 18 and 19 (or is it A4 & A5?) are used for I2C communication, so don't use them either.
-const uint8_t CS_PIN = 12;// cs pin for sd card
+// Pins D5 (SCK), D6(MISO), D7(MOSI), and D8(CS) on NodeMCU are required for the SPI for the SD card reader, so don't use them.
+// On NodeMCU, pin D1(SCL) and D2(SDA) for I2C communication
+const uint8_t CS_PIN = NodeMcuPins::D8;// cs pin for sd card
 const uint8_t LED_PIN = LED_BUILTIN_AUX; // led pin for indicator. not required.
 
-////////////////////////////////////////////
+
 // When adding new sensors, just make a wrapper that has the following variables and methods:
 class SensorWrap
 {
@@ -96,7 +97,12 @@ class DhtWrap : public SensorWrap
 */
 
 
-// DS18B20 sensor
+/* ----------------
+ * DS18B20 sensor: 
+ * Reads temperature. Many identical sensors can be wired to the same pin.
+ * num_readings does not need to be set manually. It's set in init() automatically.
+ * pin_num = OneWire data pin number
+ */
 class DS18B20Wrap : public SensorWrap
 {
 	private:
@@ -128,9 +134,17 @@ class DS18B20Wrap : public SensorWrap
 };
 
 
-// Voltmeter - scale of 1 maps analog reading to 0 - 5V. if using a voltage divider, apply approriate scale.
+/* ------------------------
+ * Analog Voltmeter
+ * Reads volts (or any analog sensor) from onboard analog pin
+ * On NodeMCU, ADC is 10 bit precision from 0 - 3.3V - (onboard v-divider: 220kOhm -- 100kOhm)
+ * On NodeMCU, the only analog pin is A0
+ * For an input voltage range of 0 - 3.3V(or 5.0V for some boards), scale is set to default of 1.0
+ * If using a voltage divider to measure a different range of voltages, use appropriate scale
+ */
 class VoltmeterWrap : public SensorWrap
 {	
+	const float INPUT_MAX_VOLTAGE = 3.3; // 3.3 for nodemcu. 5.0 for many arduinos, others
 	uint8_t analog_pin;
 	float scale;
 
@@ -145,14 +159,21 @@ class VoltmeterWrap : public SensorWrap
 	}
 	float getReading([[maybe_unused]] uint8_t reading_num)
 	{
-		int reading = analogRead(analog_pin); // returns value from 0-1024
-		float V = scale * (reading * 5.0f) / 1024.0f; 
+		int reading = analogRead(analog_pin); // returns value from 0-1023
+		float V = scale * (reading * INPUT_MAX_VOLTAGE) / 1023.0f; 
 		return V;
 	}
 };
 
 
-// BME280 sensor using I2C : A4 & A5 on arduino uno and arduino pro mini
+
+/* -------------------------------
+ * BME280
+ * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * 0x76 should be the correct address, but might need I2C scanner to check actual address
+ * //TODO: url of i2c scanner example
+ * In the SensorInfo array (SENSORS[]), pin # doesn't matter for this sensor. Put any int.
+ */
 class BME280Wrap : public SensorWrap
 {
 	private:
@@ -223,12 +244,18 @@ class BME280Wrap : public SensorWrap
 	}
 };
 
-// ADS1015 Analog to Digital Converter - using I2C
-// Gets one reading at a time. Process that reading based on what you're measuring.
-class ADS1x15VoltmeterWrap : public SensorWrap
+/* ---------------------------------
+ * ADS1115 Analog to Digital Converter - Voltmeter
+ * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
+ * //TODO: make this class more general so it can handle 1-4 measurements
+ */
+class ADS1115VoltmeterWrap : public SensorWrap
 {
 	
 	// Set Gain here. It determines voltage input range.
+	// Things might go badly if you exceed range. Maybe pick a larger range until
+	//  you're certain of the full input range.
 	//    GAIN           Range   |     GAIN         Range
 	// GAIN_TWOTHIRDS: +-6.144V  |  GAIN_FOUR:    +-1.024V
 	// GAIN_ONE:       +-4.096V  |  GAIN_EIGHT:   +-0.512V
@@ -246,7 +273,7 @@ class ADS1x15VoltmeterWrap : public SensorWrap
 	Adafruit_ADS1115 ads;
 	uint8_t pin;
 	public:
-	ADS1x15VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
+	ADS1115VoltmeterWrap(uint8_t ADCpin): pin(ADCpin)
 	{
 		ads.setGain(GAIN);
 		num_readings = 1;
@@ -274,12 +301,26 @@ class ADS1x15VoltmeterWrap : public SensorWrap
 	}
 };
 
-class ADS1x15AnemometerWrap : public ADS1x15VoltmeterWrap
+/* ---------------------
+ * ADS1115 ADC - Anemometer
+ * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
+ * Takes one reading: wind speed
+ * //TODO: somehow test a range of values to see if our voltage to wind speed map is accurate
+ * //TODO: maybe combine this with other ADS1115 readings
+ */
+class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 {
+	// GAIN_ONE corresponds to range of +-4.096V
+	// GAIN_TWO corresponds to range of +-2.048V
+	// Anemometer should return max V of 2V. If true, consider changing 
+	//  to GAIN_TWO for higher precision.
+	const adsGain_t GAIN = GAIN_ONE;
 	public:
-	using ADS1x15VoltmeterWrap::ADS1x15VoltmeterWrap;
+	using ADS1115VoltmeterWrap::ADS1115VoltmeterWrap;
 	void init()
 	{
+		ads.setGain(GAIN);
 		Serial.println("Windspd init");
 		labels = "Wind Speed";
 		ads.begin();
@@ -298,7 +339,14 @@ class ADS1x15AnemometerWrap : public ADS1x15VoltmeterWrap
 	}
 };
 
-// INA219 sensor using I2C : A4 & A5 on arduino uno and arduino pro mini
+/* ----------------------
+ * INA219 voltmeter & ammeter
+ * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * Vin+ and Vin- must be wired in series with current to be measured. Vin+ is high side, Vin- is low.
+ * Can measure up to ~3.2A without breaking. Limiting component is shunt resistor. Sensor can 
+ *  measure up to ~10-15A if resistor is swapped for one of even lower resistance.
+ * //TODO: Possibly also take power measurements? Or just calculate them?
+ */
 class INA219Wrap : public SensorWrap
 {
 	private:
@@ -332,7 +380,10 @@ class INA219Wrap : public SensorWrap
 
 };
 
-// List for different sensors
+/* --------------
+ * Linked list for storing list of sensors.
+ * TODO: maybe get rid of list_size. Doesn't look like it's being used. or maybe just use it.
+ */
 template <typename T>
 class LinkedList
 {
@@ -394,8 +445,14 @@ class LinkedList
 	
 };
 
-// for creating list of attached sensors and writing data to SD, at given frequency
-class Data_Logger
+/* =================================
+ * DataLogger
+ * Makes list of sensors, writes data from each of them to a new file based on the given filename base.
+ * Uses LinkedList class and all of the SensorWrap children.
+ * //TODO: possibly restructure this so it's easier to actually access and do stuff with any 
+ *  of the sensor values.
+ */
+class DataLogger
 {
 	String log_fn;
 	String column_labels;
@@ -407,17 +464,21 @@ class Data_Logger
 	bool did_err_msg = false;
 	
 	public:
-	Data_Logger(String logFn, uint8_t CSpinNo, uint8_t LEDpinNo, unsigned long pollInt) : 
+	/* 
+	 * logFn- filename should be short so as to conform to 8.3 short format (8 characters + '.' + 3 characters)
+	 * pollInterval- time between sensor polls in milliseconds	 *
+	 */
+	DataLogger(String logFn, uint8_t CSpinNo, uint8_t LEDpinNo, unsigned long pollInterval) : 
 	log_fn(logFn) 
 	{
 		cs_pin = CSpinNo;
 		led_pin = LEDpinNo;
-		poll_interval = pollInt;
+		poll_interval = pollInterval;
 		last_poll = 0;
 		column_labels = "Time(s)";
 	}
 	
-	// initializers. these go in setup()
+	// initializers. these are run in setup()
 	void init_sd()
 	{
 		if(NO_SD)
@@ -436,7 +497,7 @@ class Data_Logger
 		if (!SD.begin(cs_pin))
 		{
 			// error
-			Serial.println("SD err" + String(cs_pin));
+			Serial.println("SD err " + String(cs_pin));
 			error_blink();
 		}
 		// get the right filename
@@ -446,6 +507,7 @@ class Data_Logger
 	void init_sensors(const SensorInfo sensors[], uint8_t& num_sensors)
 	{
 		list_sensors(sensors, num_sensors);
+		// iterate through list of sensors to get the column labels from all of them
 		LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
 		while(current_sensor)
 		{
@@ -458,12 +520,11 @@ class Data_Logger
 		//Serial.println("-------------------------------");
 	}
 
-	// keeps track of poll interval, takes readings, and writes to file
+	// takes readings and writes to file
 	void write_to_log()
 	{
 		if(timekeeper())
 		{
-			// read from sensors
 			String temp_s = read_from_sensors();
 			Serial.println(temp_s);
 			// if not using sd stop here
@@ -471,7 +532,6 @@ class Data_Logger
 			{
 				return;
 			}
-			// open file
 			File log_file = SD.open(log_fn, FILE_WRITE);
 			if(!log_file) // if file can't be opened, show error
 			{
@@ -512,11 +572,11 @@ class Data_Logger
 			case bme280:
 				sensor_list->push_back(new BME280Wrap());
 				break;
-			case ads1x15:
-				sensor_list->push_back(new ADS1x15VoltmeterWrap(sensors[i].pin));
+			case ads1115:
+				sensor_list->push_back(new ADS1115VoltmeterWrap(sensors[i].pin));
 				break;
-			case ads1x15anemometer:
-				sensor_list->push_back(new ADS1x15AnemometerWrap(sensors[i].pin));
+			case ads1115anemometer:
+				sensor_list->push_back(new ADS1115AnemometerWrap(sensors[i].pin));
 				break;
 			case ina219:
 				sensor_list->push_back(new INA219Wrap());
@@ -527,6 +587,7 @@ class Data_Logger
 		}
 	}
 
+	// increments filename if one already exists with given name.
 	String set_next_filename()
 	{
 		String temp_fn = log_fn;
@@ -557,7 +618,7 @@ class Data_Logger
 	// returns true when it's time for another reading
 	bool timekeeper()
 	{
-		yield();
+		yield(); //TODO figure out when to actually use this yield thing
 		unsigned long now_ms = millis();
 		if (now_ms - last_poll > poll_interval)
 		{
@@ -618,17 +679,16 @@ class Data_Logger
 	}
 };
 
-Data_Logger data_logger(LOG_FILENAME, CS_PIN, LED_PIN, POLL_INTERVAL);
+DataLogger data_logger(LOG_FILENAME, CS_PIN, LED_PIN, POLL_INTERVAL);
 
 void setup()
 {
 	Serial.begin(115200);
 
-	// initilize sd and sensors
 	data_logger.init_sd();
 	data_logger.init_sensors(SENSORS, num_sensors);
 
-	yield();
+	yield(); //TODO prob don't need this yield
 }
 
 void loop()
