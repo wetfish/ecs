@@ -34,12 +34,12 @@ namespace Ads1115Pins
 }
 //----------------------------------------------------------
 // Change filename, polling interval, SD logging, and sensor types here
-const String LOG_FILENAME = "log.txt";
+const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
 const bool NO_SD = false; // disables sd card logging
 const SensorInfo SENSORS[] = 
-{// {sensor model, pin #}
-	{ina219, 0}//{ads1115, Ads1115Pins::A0}//, {ds18b20, NodeMcuPins::SD3}
+{// {sensor model, pin # (or I2C address for INA219)}
+	{ina219, 0x40}, {ina219, 0x41}//{ads1115, Ads1115Pins::A0}//, {ds18b20, NodeMcuPins::SD3}
 };
 uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 
@@ -247,6 +247,7 @@ class BME280Wrap : public SensorWrap
 /* ---------------------------------
  * ADS1115 Analog to Digital Converter - Voltmeter
  * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * I2C address default is 0x48
  * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
  * //TODO: make this class more general so it can handle 1-4 measurements
  */
@@ -342,6 +343,7 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 /* ----------------------
  * INA219 voltmeter & ammeter
  * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * I2C default address = 0x40, secondary is 0x41 (short A0 to VCC)
  * Vin+ and Vin- must be wired in series with current to be measured. Vin+ is high side, Vin- is low.
  * Can measure up to ~3.2A without breaking. Limiting component is shunt resistor. Sensor can 
  *  measure up to ~10-15A if resistor is swapped for one of even lower resistance.
@@ -353,10 +355,12 @@ class INA219Wrap : public SensorWrap
 	Adafruit_INA219 ina;
 
 	public:
-	INA219Wrap()
+	INA219Wrap(uint8_t i2cAddr) : ina(i2cAddr)
 	{
+		char addr_hex[2];
+		sprintf(addr_hex, "%02X", i2cAddr);
 		num_readings = 2; // Amps and Volts
-		labels = "Current(mA), Voltage(V)";
+		labels = "Current(mA)[0x" + String(addr_hex) + "], Voltage(V)[0x" + String(addr_hex) + "]";
 	}
 
 	void init()
@@ -517,33 +521,26 @@ class DataLogger
 		}
 		// show what each column means
 		Serial.println("\n" + column_labels);
+		if(!NO_SD)
+		{	// when parsing the CSV, either throw away all lines starting with #, or just the first line
+			write_file("# " + column_labels);
+		}
 		//Serial.println("-------------------------------");
 	}
 
 	// takes readings and writes to file
-	void write_to_log()
+	void update()
 	{
 		if(timekeeper())
 		{
-			String temp_s = read_from_sensors();
-			Serial.println(temp_s);
+			String sensor_data = read_from_sensors();
+			Serial.println(sensor_data);
 			// if not using sd stop here
 			if(NO_SD)
 			{
 				return;
 			}
-			File log_file = SD.open(log_fn, FILE_WRITE);
-			if(!log_file) // if file can't be opened, show error
-			{
-				Serial.println("Error opening file \"" + log_fn + "\"");
-				Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
-				error_blink();
-			}
-			else// otherwise, everything is fine
-			{
-				log_file.println(temp_s);
-				log_file.close();
-			}
+			write_file(sensor_data);
 		}
 	}
 
@@ -579,7 +576,7 @@ class DataLogger
 				sensor_list->push_back(new ADS1115AnemometerWrap(sensors[i].pin));
 				break;
 			case ina219:
-				sensor_list->push_back(new INA219Wrap());
+				sensor_list->push_back(new INA219Wrap(sensors[i].pin));
 				break;
 			default:
 				break;
@@ -660,6 +657,23 @@ class DataLogger
 		return datum;
 	}
 
+	// writes string to file. Opens file, writes, closes file.
+	void write_file(String to_write)
+	{
+		File log_file = SD.open(log_fn, FILE_WRITE);
+		if(!log_file) // if file can't be opened, show error
+		{
+			Serial.println("Error opening file \"" + log_fn + "\"");
+			Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
+			error_blink();
+		}
+		else// otherwise, everything is fine
+		{
+			log_file.println(to_write);
+			log_file.close();
+		}
+	}
+
 	// operates led
 	void Led(bool isOn)
 	{
@@ -693,5 +707,5 @@ void setup()
 
 void loop()
 {
-	data_logger.write_to_log();
+	data_logger.update();
 }
