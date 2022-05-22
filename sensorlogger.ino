@@ -15,6 +15,11 @@ struct SensorInfo
 	SensorModels model;
 	uint8_t pin; // data pin of that sensor - for I2C devices, this usually is arbitrary
 };
+struct DS18B20Addresses
+{
+	DeviceAddress address; 
+	String label; // label to differentiate temperature readings
+};
 // Pins printed on the NodeMCU board are not the same as the esp8266 GPIO pin number, which is what we actually need to use here
 namespace NodeMcuPins
 {
@@ -36,12 +41,26 @@ namespace Ads1115Pins
 // Change filename, polling interval, SD logging, and sensor types here
 const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = false; // disables sd card logging
+const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
-	{ina219, 0x40}, {ina219, 0x41}//{ads1115, Ads1115Pins::A0}//, {ds18b20, NodeMcuPins::SD3}
+	//{ina219, 0x40}, 
+	//{ina219, 0x41}, 
+	//{ads1115, Ads1115Pins::A0}, 
+	//{bme280, 0},
+	{ds18b20, NodeMcuPins::SD3}
 };
-uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
+
+// --- DS18B20 Addresses ---
+// List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
+// Labels should be where the sensor is located or something. Or some identifying factor.
+const DS18B20Addresses DS18B20_ADDRESSES[] = {
+		//{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "white1"},
+		//{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "white2"},
+		{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} };
+
+uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
+uint8_t NUM_DS18B20S = sizeof(DS18B20Addresses) / sizeof(DS18B20_ADDRESSES[0]);
 
 //----------------------------------------------------------
 // Other Pin selection
@@ -49,7 +68,6 @@ uint8_t num_sensors = sizeof(SENSORS) / sizeof(SENSORS[0]);
 // On NodeMCU, pin D1(SCL) and D2(SDA) for I2C communication
 const uint8_t CS_PIN = NodeMcuPins::D8;// cs pin for sd card
 const uint8_t LED_PIN = LED_BUILTIN_AUX; // led pin for indicator. not required.
-
 
 // When adding new sensors, just make a wrapper that has the following variables and methods:
 class SensorWrap
@@ -102,6 +120,7 @@ class DhtWrap : public SensorWrap
  * Reads temperature. Many identical sensors can be wired to the same pin.
  * num_readings does not need to be set manually. It's set in init() automatically.
  * pin_num = OneWire data pin number
+ * //TODO: handling of invalid addresses
  */
 class DS18B20Wrap : public SensorWrap
 {
@@ -109,18 +128,31 @@ class DS18B20Wrap : public SensorWrap
 	OneWire onewire;
 	DallasTemperature ds18b20;
 
+	String getLabels()
+	{
+		String temp_labels = "";
+		for(int i = 0; i < num_readings; i++)
+		{
+			temp_labels += "DS18 Temp(F)[" + DS18B20_ADDRESSES[i].label + "]";
+			if(i < num_readings - 1)
+			{
+				temp_labels += ", ";
+			}
+		}
+		return temp_labels;
+	}
+
 	public:
 	DS18B20Wrap(uint8_t pin_num): onewire(pin_num) 
 	{
-		num_readings = 1;
-		labels = "DS18-Temp(F)";
+		num_readings = NUM_DS18B20S;
+		labels = getLabels();
 	}
 
 	void init()
 	{
 		ds18b20.setOneWire(&onewire);
 		ds18b20.begin();
-		num_readings = ds18b20.getDeviceCount();
 	}
 
 	float getReading(uint8_t reading_num)
@@ -129,7 +161,7 @@ class DS18B20Wrap : public SensorWrap
 		{  // only request temps once for all readings
 			ds18b20.requestTemperatures();
 		}
-		return ds18b20.getTempFByIndex(reading_num); // more sensors can be on the same onewire
+		return ds18b20.getTempF(DS18B20_ADDRESSES[reading_num].address);
 	}
 };
 
@@ -155,7 +187,7 @@ class VoltmeterWrap : public SensorWrap
 	{
 		pinMode(analog_pin, INPUT);
 		num_readings = 1;
-		labels = "Voltage";
+		labels = "Voltage[ADC]";
 	}
 	float getReading([[maybe_unused]] uint8_t reading_num)
 	{
@@ -282,7 +314,7 @@ class ADS1115VoltmeterWrap : public SensorWrap
 	virtual void init()
 	{
 		Serial.println("ADC init on pin " + String(pin));
-		labels = "Voltage";
+		labels = "Voltage[ADS]";
 		ads.begin();
 	}
 	// Just return voltage reading from analog in.
@@ -360,7 +392,7 @@ class INA219Wrap : public SensorWrap
 		char addr_hex[2];
 		sprintf(addr_hex, "%02X", i2cAddr);
 		num_readings = 2; // Amps and Volts
-		labels = "Current(mA)[0x" + String(addr_hex) + "], Voltage(V)[0x" + String(addr_hex) + "]";
+		labels = "Current(mA)[0x" + String(addr_hex) + "], Voltage[0x" + String(addr_hex) + "]";
 	}
 
 	void init()
@@ -700,7 +732,7 @@ void setup()
 	Serial.begin(115200);
 
 	data_logger.init_sd();
-	data_logger.init_sensors(SENSORS, num_sensors);
+	data_logger.init_sensors(SENSORS, NUM_SENSORS);
 
 	yield(); //TODO prob don't need this yield
 }
