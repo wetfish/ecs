@@ -39,7 +39,7 @@ namespace Ads1115Pins
 }
 //----------------------------------------------------------
 // Change filename, polling interval, SD logging, and sensor types here
-const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
+const String LOG_FILENAME = "test.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
 const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
@@ -55,12 +55,13 @@ const SensorInfo SENSORS[] =
 // List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
 // Labels should be where the sensor is located or something. Or some identifying factor.
 const DS18B20Addresses DS18B20_ADDRESSES[] = {
-		//{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "white1"},
+		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "white1"},
 		//{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "white2"},
-		{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} };
+		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} 
+		};
 
 uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
-uint8_t NUM_DS18B20S = sizeof(DS18B20Addresses) / sizeof(DS18B20_ADDRESSES[0]);
+uint8_t NUM_DS18B20S = sizeof(DS18B20_ADDRESSES) / sizeof(DS18B20_ADDRESSES[0]);
 
 //----------------------------------------------------------
 // Other Pin selection
@@ -120,7 +121,7 @@ class DhtWrap : public SensorWrap
  * Reads temperature. Many identical sensors can be wired to the same pin.
  * num_readings does not need to be set manually. It's set in init() automatically.
  * pin_num = OneWire data pin number
- * //TODO: handling of invalid addresses
+ * If using an invalid address or there is a sensor missing, it will just read -196.6F
  */
 class DS18B20Wrap : public SensorWrap
 {
@@ -151,6 +152,7 @@ class DS18B20Wrap : public SensorWrap
 
 	void init()
 	{
+		Serial.println("DS18B20 init: " + String(num_readings) + " sensors");
 		ds18b20.setOneWire(&onewire);
 		ds18b20.begin();
 	}
@@ -379,26 +381,28 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
  * Vin+ and Vin- must be wired in series with current to be measured. Vin+ is high side, Vin- is low.
  * Can measure up to ~3.2A without breaking. Limiting component is shunt resistor. Sensor can 
  *  measure up to ~10-15A if resistor is swapped for one of even lower resistance.
- * //TODO: Possibly also take power measurements? Or just calculate them?
  */
 class INA219Wrap : public SensorWrap
 {
 	private:
 	Adafruit_INA219 ina;
+	char addr_hex[2];
 
 	public:
 	INA219Wrap(uint8_t i2cAddr) : ina(i2cAddr)
 	{
-		char addr_hex[2];
 		sprintf(addr_hex, "%02X", i2cAddr);
 		num_readings = 2; // Amps and Volts
-		labels = "Current(mA)[0x" + String(addr_hex) + "], Voltage[0x" + String(addr_hex) + "]";
+		labels = "Power(mW)[0x" + String(addr_hex) + "], Voltage[0x" + String(addr_hex) + "]";
 	}
 
 	void init()
 	{
 		Serial.println("INA init");
-		ina.begin();
+		if(!ina.begin())
+		{
+			Serial.println("INA init failed for address 0x" + String(addr_hex));
+		}
 	}
 
 	float getReading(uint8_t reading_num)
@@ -406,7 +410,7 @@ class INA219Wrap : public SensorWrap
 		switch (reading_num)
 		{
 			case 0:
-				return ina.getCurrent_mA();
+				return ina.getPower_mW();
 			case 1:
 				return ina.getBusVoltage_V() + (ina.getShuntVoltage_mV() / 1000);
 			default:
@@ -519,6 +523,7 @@ class DataLogger
 	{
 		if(NO_SD)
 		{
+			Serial.println("Not logging to SD.");
 			return;
 		}
 		Serial.println("CS_pin: " + String(cs_pin));
@@ -733,8 +738,6 @@ void setup()
 
 	data_logger.init_sd();
 	data_logger.init_sensors(SENSORS, NUM_SENSORS);
-
-	yield(); //TODO prob don't need this yield
 }
 
 void loop()
