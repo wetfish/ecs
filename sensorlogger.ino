@@ -9,7 +9,7 @@
 
 // These are the valid sensor models than can be used.
 enum SensorModels
-{/*dht11, dht22,*/ ds18b20, voltmeter, bme280, ads1115, ads1115anemometer, ina219};
+{/*dht11, dht22,*/ ds18b20, voltmeter, bme280, ads1115, ads1115anemometer, ads1115phototransistor, ina219};
 struct SensorInfo
 {
 	SensorModels model;
@@ -39,16 +39,17 @@ namespace Ads1115Pins
 }
 //----------------------------------------------------------
 // Change filename, polling interval, SD logging, and sensor types here
-const String LOG_FILENAME = "test.txt"; // first line is column labels, so throw that away when using the file for computations
+const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = true; // disables sd card logging
+const bool NO_SD = false; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
 	//{ina219, 0x40}, 
 	//{ina219, 0x41}, 
 	//{ads1115, Ads1115Pins::A0}, 
 	//{bme280, 0},
-	{ds18b20, NodeMcuPins::SD3}
+	//{ds18b20, NodeMcuPins::SD3},
+	{ads1115phototransistor, Ads1115Pins::A0}
 };
 
 // --- DS18B20 Addresses ---
@@ -283,11 +284,10 @@ class BME280Wrap : public SensorWrap
  * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
  * I2C address default is 0x48
  * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
- * //TODO: make this class more general so it can handle 1-4 measurements
  */
 class ADS1115VoltmeterWrap : public SensorWrap
 {
-	
+	protected:
 	// Set Gain here. It determines voltage input range.
 	// Things might go badly if you exceed range. Maybe pick a larger range until
 	//  you're certain of the full input range.
@@ -295,8 +295,7 @@ class ADS1115VoltmeterWrap : public SensorWrap
 	// GAIN_TWOTHIRDS: +-6.144V  |  GAIN_FOUR:    +-1.024V
 	// GAIN_ONE:       +-4.096V  |  GAIN_EIGHT:   +-0.512V
 	// GAIN_TWO:       +-2.048V  |  GAIN_SIXTEEN: +-0.256V
-	const adsGain_t GAIN = GAIN_TWOTHIRDS;
-	protected:
+	static const adsGain_t GAIN = GAIN_ONE;
 	// Set voltage divider resistors here.
 	// If not using voltage divider, set R1 to 0 and R2 to any positive value
 	const float R1 = 0;
@@ -346,11 +345,11 @@ class ADS1115VoltmeterWrap : public SensorWrap
  */
 class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 {
+	// Gain is a static variable in parent class ADS1115VoltmeterWrap.
 	// GAIN_ONE corresponds to range of +-4.096V
-	// GAIN_TWO corresponds to range of +-2.048V
-	// Anemometer should return max V of 2V. If true, consider changing 
-	//  to GAIN_TWO for higher precision.
-	const adsGain_t GAIN = GAIN_ONE;
+	// GAIN_TWO corresponds to range of +-2.048V - This should not be used along with other things
+	//  attached to the ADS115. They would probably give higher voltages (up to 3.3V likely).
+	// Anemometer should return max V of 2V.
 	public:
 	using ADS1115VoltmeterWrap::ADS1115VoltmeterWrap;
 	void init()
@@ -371,6 +370,56 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 		float vMin = 0; // v for velocity
 		float vMax = 32.4;
 		return (vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin;
+	}
+};
+
+/* ---------------------------------
+ * ADS1115 ADC - Phototransistor Light Detector
+ * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
+ * I2C address default is 0x48
+ * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
+ * Takes one measurement - light level.
+ */
+
+class ADS1115PhototransistorWrap : public ADS1115VoltmeterWrap
+{
+	// Gain is a static variable in parent class ADS1115VoltmeterWrap.
+	// GAIN_ONE corresponds to range of +-4.096V
+	// GAIN_TWOTHIRDS  corresponds to range of +-6.144V 
+	// GAIN_ONE recommended for 3.3V systems, GAIN_TWOTHIRDS needed for 5V
+	public:
+	using ADS1115VoltmeterWrap::ADS1115VoltmeterWrap;
+	void init()
+	{
+		ads.setGain(GAIN);
+		Serial.println("Light sensor init");
+		labels = "Light (%)";
+		ads.begin();
+	}
+
+	float getReading([[maybe_unused]] uint8_t reading_num)
+	{
+		// map voltage reading to light level (% of sensor's range)
+		float Vmin = 0.01; // V for Volts
+		float Vmax = 3.3;
+		float lMin = 0; // light level - % of sensor's range. we have no way to calibrate this to known values currently.
+		float lMax = 100;
+		return constrainReading((lMax - lMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + lMin);
+	}
+
+	protected:
+	// keep reading from going slightly over 100 or under 0
+	float constrainReading(float calc_val)
+	{
+		if (calc_val > 100)
+		{
+			return 100.0f;
+		}
+		if (calc_val < 0)
+		{
+			return 0.0f;
+		}
+		return calc_val;
 	}
 };
 
@@ -611,6 +660,9 @@ class DataLogger
 				break;
 			case ads1115anemometer:
 				sensor_list->push_back(new ADS1115AnemometerWrap(sensors[i].pin));
+				break;
+			case ads1115phototransistor:
+				sensor_list->push_back(new ADS1115PhototransistorWrap(sensors[i].pin));
 				break;
 			case ina219:
 				sensor_list->push_back(new INA219Wrap(sensors[i].pin));
