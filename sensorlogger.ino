@@ -44,21 +44,22 @@ const unsigned long POLL_INTERVAL = 3000; // in milliseconds
 const bool NO_SD = false; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
-	//{ina219, 0x40}, 
-	//{ina219, 0x41}, 
+	{ina219, 0x40}, 
+	{ina219, 0x41}, 
 	//{ads1115, Ads1115Pins::A0}, 
-	//{bme280, 0},
-	//{ds18b20, NodeMcuPins::SD3},
-	{ads1115phototransistor, Ads1115Pins::A0}
+	{bme280, 0},
+	{ds18b20, NodeMcuPins::SD3},
+	{ads1115phototransistor, Ads1115Pins::A0},
+	{ads1115anemometer, Ads1115Pins::A1}
 };
 
 // --- DS18B20 Addresses ---
 // List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
 // Labels should be where the sensor is located or something. Or some identifying factor.
 const DS18B20Addresses DS18B20_ADDRESSES[] = {
-		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "white1"},
-		//{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "white2"},
-		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} 
+		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MCU"}, // measuring electronics enclosure temp,has white heatshrink
+		{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
+		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} // has red heatshrink
 		};
 
 uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
