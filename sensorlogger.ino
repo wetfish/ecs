@@ -788,7 +788,7 @@ DataLogger data_logger(LOG_FILENAME, CS_PIN, LED_PIN, POLL_INTERVAL);
 void setup()
 {
 	Serial.begin(115200);
-
+	delay(3000);
 	data_logger.init_sd();
 	data_logger.init_sensors(SENSORS, NUM_SENSORS);
 }
