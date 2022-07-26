@@ -107,3 +107,19 @@ Use this to find addresses of all DS18B20 sensors being used. Make sure to mark 
 4. Every 5 seconds, the sensor's address will be printed. Copy that to sensorlogger.ino or just record it for later.
 5. Repeat for each DS18B20 you intend to use. Remember to indicate somehow which sensor corresponds to which address.
 
+---
+
+# sensorserial.ino and get_data_from_mcu.py
+Used to send data from a variety of sensors to a PC via USB, using a  NodeMCU ESP8266 devkit. A continuously flashing LED indicates an error with either the SD card or one of the sensors. This program is very similar to sensorlogger.ino, but it sends data to a PC running a python script rather than log to SD, and the python script controls the timiing of the sensor polls.
+
+## Setting up NodeMCU ESP8266
+Follow the same steps as for sensorlogger.ino. Then plug the NodeMCU via USB into a computer that will run the python script.
+
+## get_data_from_mcu.py
+To be run from terminal on a PC, Raspberry Pi, etc:
+
+`python3 get_data_from_mcu.py [poll_interval]`
+
+[poll_interval] is the time in seconds between sensor polls, and is an optional argument. Default poll interval is 3 seconds.
+
+Whenever restarting script, NodeMCU should be restarted as well.
