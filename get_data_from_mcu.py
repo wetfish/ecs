@@ -5,6 +5,7 @@ import sys
 import serial
 import time
 
+LOG_FN = "log.txt"
 arduino = serial.Serial('/dev/ttyUSB0',115200)
 
 def get_poll_interval():
@@ -48,6 +49,9 @@ class Ask_For_Data:
 
 if __name__ == "__main__":
     a = Ask_For_Data(get_poll_interval())
+    # overwrite file
+    f = open(LOG_FN, "w")
+    f.close()
 
     # wait for MCU
     while(True):
@@ -62,6 +66,8 @@ if __name__ == "__main__":
     labelstring = read_serial()
     labels = labelstring.split(", ")
     print(labelstring)
+    with open(LOG_FN, "w") as log:
+        log.write("# " + labelstring + "\n")
 
     while True:
         # if it's been long enough, ask for another set of readings
@@ -71,8 +77,11 @@ if __name__ == "__main__":
                 value = read_serial()
                 if is_first:
                     is_first = False
-                    print(value, end="")
                 else:
-                    print(", " + value, end="") # printing the value
+                    value = ", " + value
+                print(value, end="") # printing the value
+                with open(LOG_FN, "a") as log:
+                    log.write(value)
             print("")
-        
+            with open(LOG_FN, "a") as log:
+                log.write("\n")
