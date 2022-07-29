@@ -7,8 +7,6 @@
 
 #include <SPI.h>
 #include <SD.h> // http://www.arduino.cc/en/Reference/SD
-//#include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
-//#include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
 #include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
@@ -45,10 +43,8 @@ namespace Ads1115Pins
 	};
 }
 //----------------------------------------------------------
-// Change filename, polling interval, SD logging, and sensor types here
-const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
+// Change polling interval and sensor types here
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
 	//{ina219, 0x40}, 
@@ -89,42 +85,6 @@ class SensorWrap
 	virtual void init(){} // whatever needs to go into setup()
 	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
 };
-
-/*
-// DHT sensors
-class DhtWrap : public SensorWrap
-{
-	private:
-	DHT dht;
-
-	public:
-	DhtWrap(uint8_t pin_num, uint8_t dht_type): dht(pin_num, dht_type)
-	{
-		num_readings = 2; // 1 temp and 1 humidity
-		labels = "DHT-Temp(F), DHT-RH(%)";
-	}
-
-	void init()
-	{
-		Serial.println("DHT init");
-		dht.begin();
-	}
-
-	float getReading(uint8_t reading_num)
-	{
-		switch (reading_num)
-		{
-			case 0:
-				return dht.readTemperature(true); // true for F, false for C
-			case 1:
-				return dht.readHumidity();
-			default:
-				return NAN;
-		}
-	}
-};
-*/
-
 
 /* ----------------
  * DS18B20 sensor: 
@@ -554,7 +514,6 @@ class DataLogger
 {
 	String log_fn;
 	String column_labels;
-	uint8_t cs_pin;
 	uint8_t led_pin;
 	unsigned long poll_interval;
 	unsigned long last_poll;
@@ -568,10 +527,8 @@ class DataLogger
 	 * logFn- filename should be short so as to conform to 8.3 short format (8 characters + '.' + 3 characters)
 	 * pollInterval- time between sensor polls in milliseconds	 *
 	 */
-	DataLogger(String logFn, uint8_t CSpinNo, uint8_t LEDpinNo, unsigned long pollInterval) : 
-	log_fn(logFn) 
+	DataLogger(uint8_t LEDpinNo, unsigned long pollInterval)
 	{
-		cs_pin = CSpinNo;
 		led_pin = LEDpinNo;
 		poll_interval = pollInterval;
 		last_poll = 0;
@@ -579,33 +536,7 @@ class DataLogger
 		is_first_poll = true;
 	}
 	
-	// initializers. these are run in setup()
-	void init_sd()
-	{
-		if(NO_SD)
-		{
-			Serial.println("Not logging to SD.");
-			return;
-		}
-		Serial.println("CS_pin: " + String(cs_pin));
-		Serial.println("led_pin: " + String(led_pin));
-		Serial.println("Poll Intvl: " + String(poll_interval));
-
-		// set up led
-		pinMode(led_pin, OUTPUT);
-		Led(false);
-
-		// check if sd card is not set up
-		if (!SD.begin(cs_pin))
-		{
-			// error
-			Serial.println("SD err " + String(cs_pin));
-			error_blink();
-		}
-		// get the right filename
-		log_fn = set_next_filename();
-	}
-
+	// initializer. this is run in setup()
 	void init_sensors(const SensorInfo sensors[], uint8_t& num_sensors)
 	{
 	
@@ -622,11 +553,6 @@ class DataLogger
     	wait_for_serial();
 		// show what each column means
 		Serial.println(column_labels);
-		if(!NO_SD)
-		{	// when parsing the CSV, either throw away all lines starting with #, or just the first line
-			write_file("# " + column_labels);
-		}
-		//Serial.println("-------------------------------");
 	}
 
 	// takes readings and writes to file
@@ -635,13 +561,6 @@ class DataLogger
 		if(get_command())
 		{
 			String sensor_data = read_from_sensors();
-			//Serial.println(sensor_data);
-			// if not using sd stop here
-			if(NO_SD)
-			{
-				return;
-			}
-			write_file(sensor_data);
 		}
 	}
 
@@ -671,12 +590,6 @@ class DataLogger
 		{
 			switch (sensors[i].model)
 			{
-			//case dht11:
-			//	sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT11));
-			//	break;
-			//case dht22:
-			//	sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT22));
-			//	break;
 			case ds18b20:
 				sensor_list->push_back(new DS18B20Wrap(sensors[i].pin));
 				break;
@@ -704,35 +617,8 @@ class DataLogger
 		}
 	}
 
-	// increments filename if one already exists with given name.
-	String set_next_filename()
-	{
-		String temp_fn = log_fn;
-		String base_fn;
-		String extension;
-		unsigned long i = 1;
-		if (SD.exists(temp_fn))
-		{
-			size_t dot_loc= temp_fn.lastIndexOf(".");
-			base_fn = temp_fn.substring(0, dot_loc);
-			extension = temp_fn.substring(dot_loc);
-
-			while (SD.exists(temp_fn))
-			{
-				String i_string = "_" + String(i);
-				if (base_fn.length() + i_string.length() > 8)
-				{
-					base_fn = base_fn.substring(0, 8 - i_string.length());
-				}
-				temp_fn = base_fn + i_string + extension;
-				i++;
-			}
-		}
-		Serial.println("Filename=\"" + temp_fn + "\"");
-		return temp_fn;
-	}
-
 	// returns true when it's time for another reading
+	// unused for now, but we may want to use this in the future for tighter timing
 	bool timekeeper()
 	{
 		yield(); //TODO figure out when to actually use this yield thing
@@ -748,18 +634,18 @@ class DataLogger
 		}
 	}
 
-  // command getter
-  bool get_command()
-  {
-    if(Serial.available())
-    {
-      if(Serial.readString() == "poll")
-      {
-        return true;
-      }
-    }
-    return false;
-  }
+	// command getter
+	bool get_command()
+	{
+		if(Serial.available())
+		{
+		if(Serial.readString() == "poll")
+		{
+			return true;
+		}
+		}
+		return false;
+	}
 
 	// reads data from sensors and stores as a csv string
 	String read_from_sensors()
@@ -801,23 +687,6 @@ class DataLogger
 		return datum;
 	}
 
-	// writes string to file. Opens file, writes, closes file.
-	void write_file(String to_write)
-	{
-		File log_file = SD.open(log_fn, FILE_WRITE);
-		if(!log_file) // if file can't be opened, show error
-		{
-			//Serial.println("Error opening file \"" + log_fn + "\"");
-			//Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
-			error_blink();
-		}
-		else// otherwise, everything is fine
-		{
-			log_file.println(to_write);
-			log_file.close();
-		}
-	}
-
 	// operates led
 	void Led(bool isOn)
 	{
@@ -837,13 +706,12 @@ class DataLogger
 	}
 };
 
-DataLogger data_logger(LOG_FILENAME, CS_PIN, LED_PIN, POLL_INTERVAL);
+DataLogger data_logger(LED_PIN, POLL_INTERVAL);
 
 void setup()
 {
 	Serial.begin(115200);
 	delay(3000);
-	data_logger.init_sd();
 	data_logger.init_sensors(SENSORS, NUM_SENSORS);
 }
 
