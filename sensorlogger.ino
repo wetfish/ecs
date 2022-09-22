@@ -51,6 +51,7 @@ const SensorInfo SENSORS[] =
 	{ds18b20, NodeMcuPins::SD3},
 	{ads1115phototransistor, Ads1115Pins::A0},
 	{ads1115anemometer, Ads1115Pins::A1}
+	//{voltmeter, A0}
 };
 
 // --- DS18B20 Addresses ---
@@ -76,10 +77,22 @@ const uint8_t LED_PIN = LED_BUILTIN_AUX; // led pin for indicator. not required.
 class SensorWrap
 {
 	public:
+	bool disabled = false; // disables calls to hardware
 	uint8_t num_readings = 1; // how many readings to take from this sensor (a DHT22 has 2: temperature and humidity)
 	String labels; // label(s) for the data gathered from sensor
 	virtual void init(){} // whatever needs to go into setup()
-	virtual float getReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
+	float getReading(uint8_t reading_num)
+	{
+		if (disabled)
+		{
+			return NAN;
+		}
+		else
+		{
+			return takeReading(reading_num);
+		}
+	} 
+	virtual float takeReading(uint8_t reading_num){return NAN;} // return measured value (NAN if no reading taken)
 };
 
 /*
@@ -102,7 +115,7 @@ class DhtWrap : public SensorWrap
 		dht.begin();
 	}
 
-	float getReading(uint8_t reading_num)
+	float takeReading(uint8_t reading_num)
 	{
 		switch (reading_num)
 		{
@@ -159,7 +172,7 @@ class DS18B20Wrap : public SensorWrap
 		ds18b20.begin();
 	}
 
-	float getReading(uint8_t reading_num)
+	float takeReading(uint8_t reading_num)
 	{
 		if(reading_num == 0)
 		{  // only request temps once for all readings
@@ -185,7 +198,7 @@ class VoltmeterWrap : public SensorWrap
 	float scale;
 
 	public:
-	VoltmeterWrap(uint8_t analogPin, float scale = 1.0f) : analog_pin(analogPin), scale(scale) {}
+	VoltmeterWrap(uint8_t analogPin, float scale = 2.0f) : analog_pin(analogPin), scale(scale) {}
 
 	void init()
 	{
@@ -193,7 +206,7 @@ class VoltmeterWrap : public SensorWrap
 		num_readings = 1;
 		labels = "Voltage[ADC]";
 	}
-	float getReading([[maybe_unused]] uint8_t reading_num)
+	float takeReading([[maybe_unused]] uint8_t reading_num)
 	{
 		int reading = analogRead(analog_pin); // returns value from 0-1023
 		float V = scale * (reading * INPUT_MAX_VOLTAGE) / 1023.0f; 
@@ -250,7 +263,8 @@ class BME280Wrap : public SensorWrap
 		if(!bme.begin(I2C_ADDR))
 		{
 			Serial.println("Error: bme280 failed");
-			while(1){}
+			disabled = true;
+			//while(1){} // this will reset the nodeMCU. it doesn't like blocking code. to make this actually block forever, add a yield()
 		}
 		// sampling settings:
 		// forced mode only takes readings as needed, no oversampling, and we don't need filter
@@ -263,7 +277,7 @@ class BME280Wrap : public SensorWrap
 		
 	}
 
-	float getReading(uint8_t reading_num)
+	float takeReading(uint8_t reading_num)
 	{
 		bme.takeForcedMeasurement();
 		switch (reading_num)
@@ -317,7 +331,11 @@ class ADS1115VoltmeterWrap : public SensorWrap
 	{
 		Serial.println("ADC init on pin " + String(pin));
 		labels = "Voltage[ADS]";
-		ads.begin();
+		if(!ads.begin())
+		{
+			Serial.println("ADC init failed.");
+			disabled = true;
+		}
 	}
 	// Just return voltage reading from analog in.
 	float getReadingVoutVolts()
@@ -330,7 +348,7 @@ class ADS1115VoltmeterWrap : public SensorWrap
 		return getReadingVoutVolts() * (R1 + R2) / R2;
 	}
 	// Override this with any sensor-specific calculations
-	virtual float getReading([[maybe_unused]] uint8_t reading_num)
+	virtual float takeReading([[maybe_unused]] uint8_t reading_num)
 	{
 		return getReadingVinVolts();
 	}
@@ -358,10 +376,14 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 		ads.setGain(GAIN);
 		Serial.println("Windspd init");
 		labels = "Wind Speed";
-		ads.begin();
+		if(!ads.begin())
+		{
+			Serial.println("ADC init failed.");
+			disabled = true;
+		}
 	}
 	// Might need some testing to confirm the ranges.
-	float getReading([[maybe_unused]] uint8_t reading_num)
+	float takeReading([[maybe_unused]] uint8_t reading_num)
 	{
 		// according to product page : https://www.adafruit.com/product/1733
 		// voltage varies .4 - 2V and corresponds to wind speed of 0 - 32.4 m/s, with 9V supply to anemometer
@@ -395,10 +417,14 @@ class ADS1115PhototransistorWrap : public ADS1115VoltmeterWrap
 		ads.setGain(GAIN);
 		Serial.println("Light sensor init");
 		labels = "Light (%)";
-		ads.begin();
+		if(!ads.begin())
+		{
+			Serial.println("ADC init failed.");
+			disabled = true;
+		}
 	}
 
-	float getReading([[maybe_unused]] uint8_t reading_num)
+	float takeReading([[maybe_unused]] uint8_t reading_num)
 	{
 		// map voltage reading to light level (% of sensor's range)
 		float Vmin = 0.01; // V for Volts
@@ -452,10 +478,11 @@ class INA219Wrap : public SensorWrap
 		if(!ina.begin())
 		{
 			Serial.println("INA init failed for address 0x" + String(addr_hex));
+			disabled = true;
 		}
 	}
 
-	float getReading(uint8_t reading_num)
+	float takeReading(uint8_t reading_num)
 	{
 		switch (reading_num)
 		{
@@ -733,9 +760,15 @@ class DataLogger
 			{
 				// make sure a valid reading is taken
 				float temp_f; // = current_sensor->sensor->getReading(i);
+				uint8_t num_tries = 0; // count how many tries to read, so can timeout
 				do
 				{
 					temp_f = current_sensor->sensor->getReading(i);
+					if (num_tries > 10) // 10 tries before timeout sounds good?
+					{
+						break;
+					}
+					num_tries++;
 				} while (isnan(temp_f));
 				datum += "," + String(temp_f);
 			}
