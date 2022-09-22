@@ -83,7 +83,7 @@ class SensorWrap
 	virtual void init(){} // whatever needs to go into setup()
 	float getReading(uint8_t reading_num)
 	{
-		if (disabled)
+		if (disabled) // if sensor init failed, don't even try to read from it from now on
 		{
 			return NAN;
 		}
