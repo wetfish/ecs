@@ -56,6 +56,9 @@ Used to log data from a variety of sensors to an SD card, using a  NodeMCU ESP82
 ### Log file:
 The first line acts as column headers for the rest of the file. Each of the following lines consist of comma separated values for each of the measurements being taken. Each line is a seperate set of measurements.
 
+### Error blink code:
+- 2x blink: SD initialization error
+- ~10x blink: SD init ok, but SD write error
 
 ## Flashing the NodeMCU ESP8266
 To add support for NodeMCU board to Arduino IDE:
