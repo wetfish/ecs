@@ -50,7 +50,7 @@ const SensorInfo SENSORS[] =
 	{bme280, 0},
 	{ds18b20, NodeMcuPins::SD3},
 	{ads1115phototransistor, Ads1115Pins::A0},
-	{ads1115anemometer, Ads1115Pins::A1}
+	{ads1115anemometer, Ads1115Pins::A1},
 	//{voltmeter, A0}
 };
 
@@ -612,11 +612,21 @@ class DataLogger
 		Led(false);
 
 		// check if sd card is not set up
-		if (!SD.begin(cs_pin))
+		while (!SD.begin(cs_pin))
 		{
 			// error
 			Serial.println("SD err " + String(cs_pin));
-			error_blink();
+			//error_blink();
+			// blink 2x quick, then try again
+			Led(true);
+			delay(100);
+			Led(false);
+			delay(100);
+			Led(true);
+			delay(100);
+			Led(false);
+			delay(700);
+
 		}
 		// get the right filename
 		log_fn = set_next_filename();
@@ -784,34 +794,42 @@ class DataLogger
 	void write_file(String to_write)
 	{
 		File log_file = SD.open(log_fn, FILE_WRITE);
-		if(!log_file) // if file can't be opened, show error
+		uint8_t retry_num = 0;
+		while(!log_file) // if file can't be opened, show error
 		{
 			Serial.println("Error opening file \"" + log_fn + "\"");
 			Serial.println("Fname must be in 8.3 format."); // 8 characters + . + 3 characters
-			error_blink();
+			retry_num++;
+			delay(100);
+			if (retry_num > 30) // resets device after a while
+			{
+				error_blink();
+			}
 		}
-		else// otherwise, everything is fine
-		{
-			log_file.println(to_write);
-			log_file.close();
-		}
+
+		// otherwise, everything is fine
+		log_file.println(to_write);
+		log_file.close();
 	}
 
 	// operates led
 	void Led(bool isOn)
 	{
-		digitalWrite(led_pin, isOn);
+		digitalWrite(led_pin, !isOn);
 	}
-	// just blinks led forever. stops execution of any other code
+	// just blinks led forever. stops execution of any other code, then resets
 	void error_blink()
 	{
 		//Serial.println("error");
 		bool is_on = false;
+		uint8_t blink_times = 0;
 		while (true)
 		{
 			is_on ^= true; // toggle led state
 			Led(is_on);
 			delay(100);
+			blink_times++;
+			while (blink_times > 30){} // after few sec, get stuck - then reset through wdt
 		}
 	}
 };
