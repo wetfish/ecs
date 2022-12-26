@@ -58,9 +58,9 @@ const SensorInfo SENSORS[] =
 // List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
 // Labels should be where the sensor is located or something. Or some identifying factor.
 const DS18B20Addresses DS18B20_ADDRESSES[] = {
-		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MCU"}, // measuring electronics enclosure temp,has white heatshrink
+		//{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MAIN"}, // measuring electronics enclosure temp,has white heatshrink
 		{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
-		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "red"} // has red heatshrink
+		{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "MCU"} // has red heatshrink
 		};
 
 uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
@@ -609,7 +609,7 @@ class DataLogger
 
 		// set up led
 		pinMode(led_pin, OUTPUT);
-		Led(false);
+		Led(true);
 
 		// check if sd card is not set up
 		while (!SD.begin(cs_pin))
@@ -628,6 +628,7 @@ class DataLogger
 			delay(700);
 
 		}
+		Led(true);
 		// get the right filename
 		log_fn = set_next_filename();
 	}
