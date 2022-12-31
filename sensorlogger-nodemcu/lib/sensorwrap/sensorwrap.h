@@ -1,7 +1,7 @@
-#include "Arduino.h"
-
 #ifndef SENSORWRAP_H
 #define SENSORWRAP_H
+
+#include "Arduino.h"
 
 // When adding new sensors, just make a wrapper that has the following variables and methods:
 class SensorWrap
