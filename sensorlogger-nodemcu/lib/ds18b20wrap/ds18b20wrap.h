@@ -1,8 +1,8 @@
-#include "sensorwrap.h"
-#include <DallasTemperature.h>
-
 #ifndef DS18B20WRAP_H
 #define DS18B20WRAP_H
+
+#include "sensorwrap.h"
+#include <DallasTemperature.h>
 
 struct DS18B20Addresses
 {
