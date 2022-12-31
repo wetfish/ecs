@@ -2,15 +2,21 @@
 #include <SD.h> // http://www.arduino.cc/en/Reference/SD
 //#include <DHT_U.h> // https://github.com/adafruit/DHT-sensor-library
 //#include <DHT.h>  // https://github.com/adafruit/DHT-sensor-library
+/*
 #include <DallasTemperature.h>  // https://www.milesburton.com/Dallas_Temperature_Control_Library (for DS18B20)
 #include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
 #include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
 #include <Adafruit_INA219.h> // https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
+*/
 
 #include "sensorwrap.h"
 #include "ds18b20wrap.h"
 #include "voltmeterwrap.h"
 #include "bme280wrap.h"
+#include "ads1115voltmeterwrap.h"
+#include "ads1115anemometerwrap.h"
+#include "ads1115phototransistorwrap.h"
+#include "ina219wrap.h"
 
 // These are the valid sensor models than can be used.
 enum SensorModels
@@ -312,6 +318,7 @@ class BME280Wrap : public SensorWrap
  * I2C address default is 0x48
  * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
  */
+/*
 class ADS1115VoltmeterWrap : public SensorWrap
 {
 	protected:
@@ -364,7 +371,7 @@ class ADS1115VoltmeterWrap : public SensorWrap
 	{
 		return getReadingVinVolts();
 	}
-};
+};*/
 
 /* ---------------------
  * ADS1115 ADC - Anemometer
@@ -374,6 +381,7 @@ class ADS1115VoltmeterWrap : public SensorWrap
  * //TODO: somehow test a range of values to see if our voltage to wind speed map is accurate
  * //TODO: maybe combine this with other ADS1115 readings
  */
+/*
 class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 {
 	// Gain is a static variable in parent class ADS1115VoltmeterWrap.
@@ -406,7 +414,7 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
 		float vMax = 32.4;
 		return (vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin;
 	}
-};
+};*/
 
 /* ---------------------------------
  * ADS1115 ADC - Phototransistor Light Detector
@@ -415,7 +423,7 @@ class ADS1115AnemometerWrap : public ADS1115VoltmeterWrap
  * In the SensorInfo array (SENSORS[]), pin # refers to the analog pin on the ADS1115 that is being measured
  * Takes one measurement - light level.
  */
-
+/*
 class ADS1115PhototransistorWrap : public ADS1115VoltmeterWrap
 {
 	// Gain is a static variable in parent class ADS1115VoltmeterWrap.
@@ -460,8 +468,9 @@ class ADS1115PhototransistorWrap : public ADS1115VoltmeterWrap
 		}
 		return calc_val;
 	}
-};
+};*/
 
+//TODO: cut ina219 stuff from this file
 /* ----------------------
  * INA219 voltmeter & ammeter
  * -uses I2C: D1(SCL) and D2(SDA) on NodeMCU,  A5(SCL) and A4(SDA) on Arduino Uno and Pro Mini
@@ -470,6 +479,7 @@ class ADS1115PhototransistorWrap : public ADS1115VoltmeterWrap
  * Can measure up to ~3.2A without breaking. Limiting component is shunt resistor. Sensor can 
  *  measure up to ~10-15A if resistor is swapped for one of even lower resistance.
  */
+/*
 class INA219Wrap : public SensorWrap
 {
 	private:
@@ -507,7 +517,7 @@ class INA219Wrap : public SensorWrap
 		}
 	}
 
-};
+};*/
 
 /* --------------
  * Linked list for storing list of sensors.
