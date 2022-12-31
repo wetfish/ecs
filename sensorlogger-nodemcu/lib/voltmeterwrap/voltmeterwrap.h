@@ -1,8 +1,7 @@
-#include "sensorwrap.h"
-
-
 #ifndef VOLTMETERWRAP_H
 #define VOLTMETERWRAP_H
+
+#include "sensorwrap.h"
 
 /* ------------------------
  * Analog Voltmeter
