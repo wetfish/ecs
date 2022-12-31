@@ -1,8 +1,8 @@
-#include "sensorwrap.h"
-#include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
-
 #ifndef ADS1115VOLTMETERWRAP_H
 #define ADS1115VOLTMETERWRAP_H
+
+#include "sensorwrap.h"
+#include <Adafruit_ADS1X15.h> // https://github.com/adafruit/Adafruit_ADS1X15 (ADC board)
 
 /* ---------------------------------
  * ADS1115 Analog to Digital Converter - Voltmeter
@@ -41,5 +41,4 @@ class ADS1115VoltmeterWrap : public SensorWrap
 	// Override this with any sensor-specific calculations
 	virtual float takeReading([[maybe_unused]] uint8_t reading_num);
 };
-
 #endif
