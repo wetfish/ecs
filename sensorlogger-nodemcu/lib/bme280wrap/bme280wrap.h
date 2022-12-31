@@ -1,8 +1,8 @@
-#include "sensorwrap.h"
-#include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
-
 #ifndef BME280WRAP_H
 #define BME280WRAP_H
+
+#include "sensorwrap.h"
+#include <Adafruit_BME280.h> // https://github.com/adafruit/Adafruit_BME280_Library 
 
 /* -------------------------------
  * BME280
