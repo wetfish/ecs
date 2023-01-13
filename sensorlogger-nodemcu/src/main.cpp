@@ -706,11 +706,14 @@ class DataLogger
 			//	sensor_list->push_back(new DhtWrap(sensors[i].pin, DHT22));
 			//	break;
 			case ds18b20:
+			{
 				LinkedList<SensorWrap*>::Node* this_node;
 				this_node = sensor_list->push_back(new DS18B20Wrap(sensors[i].pin));
 				LinkedList<DS18B20Wrap*>::Node* ds_node = (LinkedList<DS18B20Wrap*>::Node*)this_node;
 				ds_node->sensor->set_addresses(DS18B20_ADDRESSES, NUM_DS18B20S);
+			}
 				break;
+			
 			case voltmeter:
 				sensor_list->push_back(new VoltmeterWrap(sensors[i].pin));
 				break;
