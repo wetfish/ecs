@@ -126,3 +126,35 @@ To be run from terminal on a PC, Raspberry Pi, etc:
 [poll_interval] is the time in seconds between sensor polls, and is an optional argument. Default poll interval is 3 seconds.
 
 Whenever restarting script, NodeMCU should be restarted as well.
+
+
+# GoPro as webcam setup
+https://github.com/jschmid1/gopro_as_webcam_on_linux
+
+- Install gopro_as_webcam_on_linux:
+
+	`sudo su -c "bash <(wget -qO- https://cutt.ly/PjNkrzq)" root`
+
+- Install dependencies:
+
+	`sudo apt install ffmpeg v4l2loopback-dkms curl vlc`
+
+- Plug gopro into computer via USB (can be without battery and sd card) and in new terminal:
+
+	`sudo gopro webcam -n -a`
+
+	This starts gopro in webcam mode using auto settings (-a), and no input from user (-n).
+
+- Check for the device id with:
+
+	`ls -l dev/video*`
+
+	This is my result:
+
+	>crw-rw----+ 1 root video 81, 0 Jan  9  2022 /dev/video0
+	>
+	>crw-rw----+ 1 root video 81, 1 Jan  9  2022 /dev/video1
+	>
+	>crw-rw----+ 1 root video 81, 2 Jan 25 14:40 /dev/video42
+
+	/dev/video0 and 1 both referred to the laptop's webcam, so /dev/video42 is the gopro.
