@@ -9,7 +9,8 @@ float SensorWrap::getReading(uint8_t reading_num)
     }
     else
     {
-        return takeReading(reading_num);
+        last_reading[reading_num] = takeReading(reading_num);
+        return last_reading[reading_num];
     }
 } 
 
