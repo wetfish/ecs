@@ -17,6 +17,8 @@ https://github.com/adafruit/Adafruit_INA219 (Volt/Ammeter)
 #include "ads1115phototransistorwrap.h"
 #include "ina219wrap.h"
 
+#include "oleddisplay.h"
+
 // These are the valid sensor models than can be used.
 enum SensorModels
 {/*dht11, dht22,*/ ds18b20, voltmeter, bme280, ads1115, ads1115anemometer, ads1115phototransistor, ina219};
@@ -47,7 +49,7 @@ namespace Ads1115Pins
 // Change filename, polling interval, SD logging, and sensor types here
 const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = false; // disables sd card logging
+const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
 	{ina219, 0x40}, 
@@ -194,6 +196,11 @@ class DataLogger
 	unsigned long last_poll;
 	LinkedList<SensorWrap*>* sensor_list = new LinkedList<SensorWrap*>();
 	bool did_err_msg = false;
+
+	uint8_t total_num_readings; // total number of readings per update
+	float last_sensor_readings[25]; // this should be large enough for all of our readings.
+
+	OledDisplay display;
 	
 	public:
 	/* 
@@ -208,6 +215,7 @@ class DataLogger
 		poll_interval = pollInterval;
 		last_poll = 0;
 		column_labels = "Time(s)";
+		total_num_readings = 1; // we will always at least be recording time
 	}
 	
 	// initializers. these are run in setup()
@@ -250,6 +258,7 @@ class DataLogger
 
 	void init_sensors(const SensorInfo sensors[], uint8_t& num_sensors)
 	{
+		display.init();
 		list_sensors(sensors, num_sensors);
 		// iterate through list of sensors to get the column labels from all of them
 		LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
@@ -257,6 +266,7 @@ class DataLogger
 		{
 			current_sensor->sensor->init();
 			column_labels += ", " + current_sensor->sensor->labels;
+			total_num_readings += current_sensor->sensor->num_readings;
 			current_sensor = sensor_list->get_next_node(current_sensor);
 		}
 		// show what each column means
@@ -308,7 +318,6 @@ class DataLogger
 				ds_node->sensor->set_addresses(DS18B20_ADDRESSES, NUM_DS18B20S);
 			}
 				break;
-			
 			case voltmeter:
 				sensor_list->push_back(new VoltmeterWrap(sensors[i].pin));
 				break;
@@ -383,8 +392,11 @@ class DataLogger
 	{
 		// record time
 		String datum = String(last_poll/1000);
+		last_sensor_readings[0] = last_poll/1000;
 		// get data from sensors
 		LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
+		// keep track of readings
+		uint8_t reading_index = 1;
 		while(current_sensor)
 		{
 			// record reading into string
@@ -403,6 +415,8 @@ class DataLogger
 					num_tries++;
 				} while (isnan(temp_f));
 				datum += "," + String(temp_f);
+				last_sensor_readings[reading_index] = temp_f;
+				reading_index++;
 			}
 
 			// go to next sensor
@@ -432,6 +446,73 @@ class DataLogger
 		// otherwise, everything is fine
 		log_file.println(to_write);
 		log_file.close();
+	}
+
+	// formats data for oled display
+	void oled_display()
+	{
+		// which sensors do we want to display on the oled (10 max i think  for the 128x32)
+		static const String DISPLAY_LABELS[] = // match these to the exact string in the corresponding sensor's class
+		{
+			"Voltage[ADC]"
+		};
+		static const String DISPLAY_UNITS[] = // match these to DISPLAY_LABELS
+		{
+			"V"
+		};
+		uint8_t NUM_DISPLAYED_VALUES = sizeof(DISPLAY_LABELS) / sizeof(DISPLAY_LABELS[0]);
+		float display_values[7]; // 4 lines on the display, 2 values can fit per line, but time will take one slot
+			
+		// keep track of readings
+		for(uint8_t label_index = 0; label_index < NUM_DISPLAYED_VALUES; label_index++)
+		{
+			// iterate through sensor list and get last readings
+			LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
+			
+			while(current_sensor)
+			{
+				// record reading into string
+				String current_full_label = current_sensor->sensor->labels;
+				for (uint8_t i = 0; i < current_sensor->sensor->num_readings; i++)
+				{	
+					// if the current reading is the one we want
+					if(current_full_label == DISPLAY_LABELS[label_index] || current_full_label.startsWith(DISPLAY_LABELS[label_index]))
+					{
+						display_values[label_index] = current_sensor->sensor->last_reading[i];
+						break;
+					}
+					// if there are more sensor readings left on this sensor, cut the beginning off the label
+					if(i+1 < current_sensor->sensor->num_readings) 
+					{
+						// get new string starting char after the first comma (this_label, next_label)
+						current_full_label = current_full_label.substring(current_full_label.indexOf(',' + 2)); 
+					}
+				}
+
+				// go to next sensor
+				current_sensor = sensor_list->get_next_node(current_sensor);
+			}
+		}
+
+		String display_string[4];
+		// 4 lines of display
+		for (uint8_t i = 0; i < 4; i++)
+		{
+			if(i < NUM_DISPLAYED_VALUES)
+			{
+				display_string[i] = DISPLAY_LABELS[i] + String(display_values[i]) + DISPLAY_UNITS[i];
+				if(i + 4 < NUM_DISPLAYED_VALUES)
+				{	// second column stuff, if it exists
+					display_string[i] += "     " + DISPLAY_LABELS[i+4] + String(display_values[i+4]) + DISPLAY_UNITS[i+4];
+				}
+			}
+		}
+		if (NUM_DISPLAYED_VALUES < 4)
+		{
+			display_string[3] = "           ";
+		}		
+		display_string[3] += "     Elapsed: " + String(float(last_poll) / 3600000) + "hrs";
+		display.display(display_string);
 	}
 
 	// operates led
