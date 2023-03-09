@@ -18,12 +18,10 @@ Requires python 3
 
 Requires 1-wire interface to be enabled in raspi-config for ds18b20 sensor https://www.raspberrypi-spy.co.uk/2018/02/enable-1-wire-interface-raspberry-pi/
 
-To install dependencies:
-
+To install dependencies:</br>
 `pip install -r requirements.txt`
   
-Usage:
-
+Usage:</br>
 `python3 sensorlogger.py [GPIO pin #] [Sensor type] {-f output filename}`
 
 GPIO pin # and sensor type required. When -f is used, an output filename can be specified for the log file, defaults to [sensorname].log when -f is not used
@@ -35,8 +33,7 @@ Sensor type is all lower case. dht11, dht22, or ds18b20
 ## quickcsvplotter.py
 Plots the data collected by sensorlogger.py
 
-Usage:
-
+Usage:</br>
 `python3 quickcsvplotter.py [csv filename 1] [csv filename 2] ... [csv filename n]`
 
 Providing filenames in command line is optional. If no filenames are specified, all csvs in current directory will be plotted.
@@ -119,42 +116,76 @@ Used to send data from a variety of sensors to a PC via USB, using a  NodeMCU ES
 Follow the same steps as for sensorlogger.ino. Then plug the NodeMCU via USB into a computer that will run the python script.
 
 ## get_data_from_mcu.py
-To be run from terminal on a PC, Raspberry Pi, etc:
-
+To be run from terminal on a PC, Raspberry Pi, etc:</br>
 `python3 get_data_from_mcu.py [poll_interval]`
 
 [poll_interval] is the time in seconds between sensor polls, and is an optional argument. Default poll interval is 3 seconds.
 
 Whenever restarting script, NodeMCU should be restarted as well.
 
+# Station M1 setup
 
-# GoPro as webcam setup
+## Installing armbian on station m1
+
+- Get the CLI version from here:
+https://www.armbian.com/station-m1/
+
+- Write the image to an SD card with something like BalenaEtcher
+
+- Create password for root.
+- Create username and password.
+
+### Set up wifi:
+- Load the armbian-config utility:</br>
+	`sudo armbian-config`
+
+- Choose Network->Wifi, then find your wifi network and enter the password.
+
+## Set up autologin:
+
+- Create autologin.conf file:</br>
+	`sudo nano /etc/systemd/system/getty@.service.d/autologin.conf`
+
+- Fill it with this (change "wetfish" to whatever your username is):
+```ini
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin wetfish --noclear %I $TERM
+```
+
+- then:  
+`sudo systemctl daemon-reload`
+
+- then reboot to confirm it works
+
+## Install kernel headers
+
+- Get the kernel version:  
+`uname -r`  
+It should be "6.1.11-media"
+
+- Find all kernel headers packages:  
+`sudo apt search linux-headers-`  
+The one we want is linux-headers-current-media. the description says it's for 6.1.11-media. If your kernel is different, find the right one.
+
+- Then install the headers  
+`sudo apt install linux-headers-current-media`
+
+## GoPro as webcam setup
 https://github.com/jschmid1/gopro_as_webcam_on_linux
 
-- Install gopro_as_webcam_on_linux:
-
+- Install gopro_as_webcam_on_linux:</br>
 	`sudo su -c "bash <(wget -qO- https://cutt.ly/PjNkrzq)" root`
 
-- Install dependencies:
-
+- Install dependencies:</br>
 	`sudo apt install ffmpeg v4l2loopback-dkms curl vlc`
 
-- Plug gopro into computer via USB (can be without battery and sd card) and in new terminal:
-
+- Plug in gopro via usb and power it on (single press of power button on left). The screen should show a charging icon.
+This process needs to continue running, so open a new terminal and type:</br>
 	`sudo gopro webcam -n -a`
 
 	This starts gopro in webcam mode using auto settings (-a), and no input from user (-n).
-
-- Check for the device id with:
-
-	`ls -l dev/video*`
-
-	This is my result:
-
-	>crw-rw----+ 1 root video 81, 0 Jan  9  2022 /dev/video0
-	>
-	>crw-rw----+ 1 root video 81, 1 Jan  9  2022 /dev/video1
-	>
-	>crw-rw----+ 1 root video 81, 2 Jan 25 14:40 /dev/video42
-
-	/dev/video0 and 1 both referred to the laptop's webcam, so /dev/video42 is the gopro.
+	
+	Once everything gets initialized, near the bottom of the output, look for a line like this:</br>
+	`Output #0, video4linux,v4l2, to '/dev/video42'`</br>
+	This means my gopro's device id is 42. remember this.
