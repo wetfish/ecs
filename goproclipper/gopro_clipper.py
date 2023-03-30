@@ -18,29 +18,33 @@ from timeit import default_timer as timer
 from get_ch import Get_Ch # to trigger recording for testing
 
 class Clipper:
-    def __init__(self, output_dir="output1", framesps=30, codec="XVID", buffer_size=30, cam_num=0):
+    def __init__(self, output_dir="output1", codec="XVID", buffer_size=60, cam_num=0, lead_len=-1):
         self.output_dir = output_dir
-        self.framesps = framesps
-        self.spframe = 1/framesps
         self.codec = codec
-        self.buffer_size = buffer_size
-        self.default_clip_len = buffer_size * 20
+        
+        #self.default_clip_len = buffer_size * 20
         self.cam_num = cam_num
+        self.clip_lead_len = lead_len # if -1, then use buffer_size to determine clip lead and trail length
 
-        # initialize the video stream and allow the camera sensor to
-        # warmup
+        # initialize the video stream and allow the camera sensor to warm up
         print("[INFO] warming up camera...")
+
         # cv2 videocapture object is just to get the FPS of the camera
         self.cap = cv2.VideoCapture(self.cam_num)
         self.framesps = self.cap.get(cv2.CAP_PROP_FPS)
-        self.spframe = 1/framesps
+        self.spframe = 1/self.framesps
         print(f"Cam FPS: {self.framesps}")
         self.cap.release()
+
+        # set buffer size to clip lead length if clip length is specified
+        if (self.clip_lead_len is not -1):
+            self.buffer_size = int(self.clip_lead_len * self.framesps)
+        else:
+            self.buffer_size = buffer_size
+
         # we use the videostream object to actually get the frames
         self.vs = VideoStream(self.cam_num,usePiCamera=False).start()
         time.sleep(2.0)
-
-
 
         # initialize key clip writer and the consecutive number of
         # frames that have *not* contained any action
@@ -196,17 +200,17 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--output", type=str, default="output1",
         help="path to output directory")
-    ap.add_argument("-f", "--fps", type=int, default=30,
-        help="FPS of output video")
     ap.add_argument("-c", "--codec", type=str, default="XVID",
         help="codec of output video")
     ap.add_argument("-b", "--buffer-size", type=int, default=60,
         help="buffer size of video clip writer")
     ap.add_argument("-s", "--source", type=int, default=42,
         help="source cam for video")
+    ap.add_argument("-l", "--length-of-lead-in", type=float, default=-1,
+        help="clip's leading and trailing length in seconds") # -1 means use buffer size instead
     args = vars(ap.parse_args())
 
-    clipper = Clipper(args["output"], args["fps"], args["codec"], args["buffer_size"], args["source"])
+    clipper = Clipper(args["output"], args["codec"], args["buffer_size"], args["source"], args["length_of_lead_in"])
     while(clipper.clip_frame()):
         pass
     print("exiting gopro clipper")
