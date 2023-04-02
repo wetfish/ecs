@@ -455,15 +455,15 @@ class DataLogger
 		// which sensors do we want to display on the oled (10 max i think  for the 128x32)
 		static const String ID_LABELS[] = // These must == exact string label in the corresponding sensor's class
 		{
-			"Voltage[ADS]"
+			"BME280 Temp(F)", "BME280 Humidity(%)", "DS18 Temp(F)[MAIN]", "Voltage[ADS]", "Power(mW)[0x40]", "Wind Speed"
 		};
 		static const String DISPLAY_LABELS[] = // This will be displayed on the oled before the measurement. match these to ID_LABELS.
 		{
-			"V:"
+			"Air:", "Air:", "Batt:", "Batt:", "Batt:", "Wnd:"
 		};
 		static const String DISPLAY_UNITS[] = // This will be displayed on the oled after the measurement. match these to ID_LABELS
 		{
-			"V"
+			"F", "%", "F", "V", "mW", "mph"
 		};
 		uint8_t NUM_DISPLAYED_VALUES = sizeof(ID_LABELS) / sizeof(ID_LABELS[0]);
 		float display_values[7]; // 4 lines on the display, 2 values can fit per line, but time will take one slot
@@ -499,16 +499,66 @@ class DataLogger
 			}
 		}
 
+		// make strings for display - the array size should = display_values[] + 1
+		String display_value_strings[8];
+		// make sure each value is less than 4 characters long. if not, round it
+		for(uint8_t i = 0; i < NUM_DISPLAYED_VALUES; i++)
+		{
+			if (display_values[i] < 10)
+			{
+				display_values[i] = round(display_values[i] * 100) / 100;
+			}
+			else if (display_values[i] < 100)
+			{
+				display_values[i] = round(display_values[i] * 10) / 10;
+			}
+			else
+			{
+				display_values[i] = round(display_values[i]);
+			}
+			// convert to string and remove trailing zeros
+			display_value_strings[i] = removeTrailingZeros(String(display_values[i]));
+			// check if display will be greater than 10 char
+			if((display_value_strings[i] + DISPLAY_UNITS[i] + DISPLAY_LABELS[i]).length() > 10)
+			{
+				// if so, round it some more
+				// if we need one less character:
+				if ((display_value_strings[i] + DISPLAY_UNITS[i] + DISPLAY_LABELS[i]).length() - 10 == 1)
+				{
+					if (display_values[i] < 10)
+					{
+						display_values[i] = round(display_values[i] * 10) / 10;
+					}
+					else
+					{
+						display_values[i] = round(display_values[i]);
+					}
+				}
+				// if we need two less characters:
+				else
+				{
+					display_values[i] = round(display_values[i]);
+				}
+				// convert to string and remove trailing zeros
+				display_value_strings[i] = removeTrailingZeros(String(display_values[i]));
+			}
+		}
+
 		String display_string[4];
 		// 4 lines of display
 		for (uint8_t i = 0; i < 4; i++)
 		{
 			if(i < NUM_DISPLAYED_VALUES)
 			{
-				display_string[i] = DISPLAY_LABELS[i] + String(display_values[i]) + DISPLAY_UNITS[i];
+				display_string[i] = DISPLAY_LABELS[i] + display_value_strings[i] + DISPLAY_UNITS[i];
+				// add spaces to make sure the second column is aligned (column 1 is 10 chars long)
+				while(display_string[i].length() < 10)
+				{
+					display_string[i] += " ";
+				}
 				if(i + 4 < NUM_DISPLAYED_VALUES)
 				{	// second column stuff, if it exists
-					display_string[i] += "     " + DISPLAY_LABELS[i+4] + String(display_values[i+4]) + DISPLAY_UNITS[i+4];
+					display_string[i] += " " + DISPLAY_LABELS[i+4] + display_value_strings[i+4] + DISPLAY_UNITS[i+4];
 				}
 			}
 		}
@@ -520,6 +570,47 @@ class DataLogger
 		display.display(display_string);
 	}
 
+	// converts float to string and removes trailing zeros
+	String floatToString(float value) {
+	char result[12]; // increase size if needed
+		dtostrf(value, 0, 2, result);  // convert float to char array with 2 decimal places (change this value as needed)
+		String stringResult = String(result);
+
+		// Removes any trailing zeros from decimal point
+		int lastIndex = stringResult.length() - 1;
+		while (stringResult.charAt(lastIndex) == '0') {
+			lastIndex--;
+		}
+		if (stringResult.charAt(lastIndex) == '.') {
+			lastIndex--;
+		}
+		stringResult.remove(lastIndex + 1, stringResult.length());
+
+		return stringResult;
+	}
+
+	// remove trailing zeros from a string
+	String removeTrailingZeros(String str)
+	{
+		// make sure there is a decimal point
+		if (str.indexOf('.') == -1)
+		{
+			return str;
+		}
+		// remove trailing zeros
+		int lastIndex = str.length() - 1; // index of last char
+		while (str.charAt(lastIndex) == '0') // if there is a zero, mark it for removal
+		{
+			lastIndex--;
+		}
+		if (str.charAt(lastIndex) == '.') // if there is a decimal point, mark it for removal
+		{
+			lastIndex--;
+		}
+		str.remove(lastIndex + 1, str.length()); // remove all chars after the last non-zero char
+		return str;
+	}
+	
 	// operates led
 	void Led(bool isOn)
 	{
