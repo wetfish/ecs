@@ -53,12 +53,12 @@ const bool NO_SD = true; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
 	{ina219, 0x40}, 
-	{ina219, 0x41}, 
+	//{ina219, 0x41}, 
 	//{ads1115, Ads1115Pins::A0}, 
-	{bme280, 0},
+	//{bme280, 0},
 	{ds18b20, NodeMcuPins::SD3},
-	{ads1115phototransistor, Ads1115Pins::A0},
-	{ads1115anemometer, Ads1115Pins::A1},
+	//{ads1115phototransistor, Ads1115Pins::A0},
+	//{ads1115anemometer, Ads1115Pins::A1},
 	//{voltmeter, A0}
 };
 
@@ -66,9 +66,9 @@ const SensorInfo SENSORS[] =
 // List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
 // Labels should be where the sensor is located or something. Or some identifying factor.
 const DS18B20Addresses DS18B20_ADDRESSES[] = {
-		//{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MAIN"}, // measuring electronics enclosure temp,has white heatshrink
-		{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
-		{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "MCU"} // has red heatshrink
+		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MAIN"}, // measuring electronics enclosure temp,has white heatshrink
+		//{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
+		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "MCU"} // has red heatshrink
 		};
 
 uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
@@ -285,6 +285,7 @@ class DataLogger
 		{
 			String sensor_data = read_from_sensors();
 			Serial.println(sensor_data);
+			oled_display();
 			// if not using sd stop here
 			if(NO_SD)
 			{
@@ -452,15 +453,19 @@ class DataLogger
 	void oled_display()
 	{
 		// which sensors do we want to display on the oled (10 max i think  for the 128x32)
-		static const String DISPLAY_LABELS[] = // match these to the exact string in the corresponding sensor's class
+		static const String ID_LABELS[] = // These must == exact string label in the corresponding sensor's class
 		{
-			"Voltage[ADC]"
+			"Voltage[ADS]"
 		};
-		static const String DISPLAY_UNITS[] = // match these to DISPLAY_LABELS
+		static const String DISPLAY_LABELS[] = // This will be displayed on the oled before the measurement. match these to ID_LABELS.
+		{
+			"V:"
+		};
+		static const String DISPLAY_UNITS[] = // This will be displayed on the oled after the measurement. match these to ID_LABELS
 		{
 			"V"
 		};
-		uint8_t NUM_DISPLAYED_VALUES = sizeof(DISPLAY_LABELS) / sizeof(DISPLAY_LABELS[0]);
+		uint8_t NUM_DISPLAYED_VALUES = sizeof(ID_LABELS) / sizeof(ID_LABELS[0]);
 		float display_values[7]; // 4 lines on the display, 2 values can fit per line, but time will take one slot
 			
 		// keep track of readings
@@ -509,9 +514,9 @@ class DataLogger
 		}
 		if (NUM_DISPLAYED_VALUES < 4)
 		{
-			display_string[3] = "           ";
+			display_string[3] = "          ";
 		}		
-		display_string[3] += "     Elapsed: " + String(float(last_poll) / 3600000) + "hrs";
+		display_string[3] += " t:" + String(float(last_poll) / 3600000) + "hrs";
 		display.display(display_string);
 	}
 
