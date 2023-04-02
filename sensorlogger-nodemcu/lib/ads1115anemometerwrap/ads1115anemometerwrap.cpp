@@ -37,5 +37,6 @@ float ADS1115AnemometerWrap::takeReading([[maybe_unused]] uint8_t reading_num)
     float Vmax = 2.0;
     float vMin = 0; // v for velocity
     float vMax = 32.4;
-    return (vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin;
+    const float metersPerSecondToMilesPerHour = 2.23694;
+    return metersPerSecondToMilesPerHour * ((vMax - vMin) * (getReadingVoutVolts() - Vmin) / (Vmax - Vmin) + vMin);
 }
