@@ -19,7 +19,14 @@ void OledDisplay::init()
     oled.cp437(true);         // Use full 256 char 'Code Page 437' font
 }
 
-void OledDisplay::display()
-{
-
+void OledDisplay::display(String to_display[])
+{   
+    oled.clearDisplay();
+    oled.setCursor(0, 0);
+    // display has 4 lines
+    for(uint8_t i = 0; i < 4; i++)
+    {
+        oled.println(to_display[i]);
+    }
+    oled.display();
 }
