@@ -49,16 +49,16 @@ namespace Ads1115Pins
 // Change filename, polling interval, SD logging, and sensor types here
 const String LOG_FILENAME = "log.txt"; // first line is column labels, so throw that away when using the file for computations
 const unsigned long POLL_INTERVAL = 3000; // in milliseconds
-const bool NO_SD = true; // disables sd card logging
+const bool NO_SD = false; // disables sd card logging
 const SensorInfo SENSORS[] = 
 {// {sensor model, pin # (or I2C address for INA219)}
 	{ina219, 0x40}, 
-	//{ina219, 0x41}, 
+	{ina219, 0x41}, 
 	//{ads1115, Ads1115Pins::A0}, 
-	//{bme280, 0},
+	{bme280, 0},
 	{ds18b20, NodeMcuPins::SD3},
-	//{ads1115phototransistor, Ads1115Pins::A0},
-	//{ads1115anemometer, Ads1115Pins::A1},
+	{ads1115phototransistor, Ads1115Pins::A0},
+	{ads1115anemometer, Ads1115Pins::A1},
 	//{voltmeter, A0}
 };
 
@@ -66,9 +66,9 @@ const SensorInfo SENSORS[] =
 // List sensor addresses here. Get them individually with ds18b20AddressFinder.ino or similar
 // Labels should be where the sensor is located or something. Or some identifying factor.
 const DS18B20Addresses DS18B20_ADDRESSES[] = {
-		{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MAIN"}, // measuring electronics enclosure temp,has white heatshrink
-		//{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
-		//{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "MCU"} // has red heatshrink
+		//{{0x28, 0x63, 0x1B, 0x49, 0xF6, 0xAE, 0x3C, 0x88}, "MAIN"}, // measuring electronics enclosure temp,has white heatshrink
+		{{0x28, 0xDC, 0xA0, 0x49, 0xF6, 0xEB, 0x3C, 0xF0}, "Batt"}, // measuring battery enclosure temp, has white heatshrink
+		{{0x28, 0x6A, 0x64, 0x49, 0xF6, 0xBE, 0x3C, 0xF0}, "MCU"} // has red heatshrink
 		};
 
 uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
@@ -455,7 +455,7 @@ class DataLogger
 		// which sensors do we want to display on the oled (10 max i think  for the 128x32)
 		static const String ID_LABELS[] = // These must == exact string label in the corresponding sensor's class
 		{
-			"BME280 Temp(F)", "BME280 Humidity(%)", "DS18 Temp(F)[MAIN]", "Voltage[ADS]", "Power(mW)[0x40]", "Wind Speed"
+			"BME280 Temp(F)", "BME280 Humidity(%)", "DS18 Temp(F)[Batt]", "Voltage[0x40]", "Power(mW)[0x40]", "Wind Speed"
 		};
 		static const String DISPLAY_LABELS[] = // This will be displayed on the oled before the measurement. match these to ID_LABELS.
 		{
@@ -474,24 +474,35 @@ class DataLogger
 			// iterate through sensor list and get last readings
 			LinkedList<SensorWrap*>::Node* current_sensor = sensor_list->head;
 			
+			// flag to determine if we found the sensor we want
+			bool found_sensor = false;
 			while(current_sensor)
 			{
 				// record reading into string
 				String current_full_label = current_sensor->sensor->labels;
+				
 				for (uint8_t i = 0; i < current_sensor->sensor->num_readings; i++)
 				{	
+					//print the labels for this sensor and the label we are looking for
+					//Serial.println("current_full_label: " + current_full_label + ".\nlooking for:        " + ID_LABELS[label_index]+".");
 					// if the current reading is the one we want
-					if(current_full_label == DISPLAY_LABELS[label_index] || current_full_label.startsWith(DISPLAY_LABELS[label_index]))
+					if(current_full_label == ID_LABELS[label_index] || current_full_label.startsWith(ID_LABELS[label_index]))
 					{
 						display_values[label_index] = current_sensor->sensor->last_reading[i];
+						found_sensor = true;
 						break;
 					}
 					// if there are more sensor readings left on this sensor, cut the beginning off the label
 					if(i+1 < current_sensor->sensor->num_readings) 
 					{
-						// get new string starting char after the first comma (this_label, next_label)
-						current_full_label = current_full_label.substring(current_full_label.indexOf(',' + 2)); 
+						// snip the first label off the string, along with the comma and space
+						current_full_label = current_full_label.substring(current_full_label.indexOf(',') + 2);
 					}
+				}
+				// if we haven't found the sensor yet
+				if(!found_sensor)
+				{
+					display_values[label_index] = -196.6; // error code
 				}
 
 				// go to next sensor
@@ -503,8 +514,15 @@ class DataLogger
 		String display_value_strings[8];
 		// make sure each value is less than 4 characters long. if not, round it
 		for(uint8_t i = 0; i < NUM_DISPLAYED_VALUES; i++)
-		{
-			if (display_values[i] < 10)
+		{		
+			// if our sensor is errored, display dashes
+			if(abs(display_values[i] + 196.6) < 0.01)
+			{
+				display_value_strings[i] = "--";
+				continue;
+			}
+
+			else if (display_values[i] < 10)
 			{
 				display_values[i] = round(display_values[i] * 100) / 100;
 			}
