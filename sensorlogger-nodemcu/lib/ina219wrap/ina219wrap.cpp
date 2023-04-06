@@ -18,7 +18,7 @@ INA219Wrap::INA219Wrap(uint8_t i2cAddr) : ina(i2cAddr)
 
 void INA219Wrap::init()
 {
-    Serial.println("INA init");
+    Serial.println("INA init, label= " + labels);
     if(!ina.begin())
     {
         Serial.println("INA init failed for address 0x" + String(addr_hex));
