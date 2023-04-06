@@ -44,7 +44,7 @@ void DS18B20Wrap::set_addresses(const DS18B20Addresses addresses[5], uint8_t num
 
 void DS18B20Wrap::init()
 {
-    Serial.println("DS18B20 init: " + String(num_readings) + " sensors");
+    Serial.println("DS18B20 init: " + String(num_readings) + " sensors, label= " + labels);
     ds18b20.setOneWire(&onewire);
     ds18b20.begin();
 }
