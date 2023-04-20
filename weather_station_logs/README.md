@@ -7,5 +7,5 @@ Each log has a heading that is formatted as follows:
 
 Each line following the heading is a comma separated list of sensor readings which corresponds to the comma separated list of sensor labels in the header. 
 
-Any line starting with the '#' character contains no sensor reading data. Concatenated logs include one such line to indicate locations of concatenation. ex:  
+Any line starting with the '#' character contains no sensor reading data. Concatenated logs include one such line to indicate each location of concatenation. ex:  
 `# ./relative_file_path_to_logs/log_x.txt`
