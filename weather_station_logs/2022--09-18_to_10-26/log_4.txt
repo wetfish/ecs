@@ -1,0 +1,3 @@
+# Time(s), Power(mW)[0x40], Voltage[0x40], Power(mW)[0x41], Voltage[0x41], DS18 Temp(F)[Main], DS18 Temp(F)[Batt], Light (%), Wind Speed
+4,600.00,13.75,494.00,13.75,70.59,68.00,100.00,2.20
+7,560.00,13.76,502.00,13.76,70.59,68.11,100.00,2.19
