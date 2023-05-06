@@ -1,0 +1,1 @@
+# Time(s), Power(mW)[0x40], Voltage[0x40], Power(mW)[0x41], Voltage[0x41], BME280 P(hPa), BME280 RH(%), BME280 Temp(F), DS18 Temp(F)[Batt], DS18 Temp(F)[MCU], Light (%), Wind Speed
